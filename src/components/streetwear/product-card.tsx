@@ -20,15 +20,16 @@ export function ProductCard({ title, price, image, tag, index = 0 }: ProductCard
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-80px" }}
       transition={{ duration: 0.55, delay: index * 0.08 }}
-      whileHover={{ y: -8 }}
-      className="group overflow-hidden border border-black/10 bg-white shadow-[0_16px_45px_rgba(17,17,17,0.08)] transition-shadow duration-300 hover:shadow-[0_24px_65px_rgba(17,17,17,0.14)]"
+      className="group overflow-hidden border border-black/10 bg-white shadow-[0_16px_45px_rgba(17,17,17,0.08)] transition-shadow duration-300 hover:shadow-[0_24px_65px_rgba(17,17,17,0.14)] active:scale-[0.98]"
     >
       <Link href="/shop" className="relative block aspect-[4/5] overflow-hidden bg-[#ece8df]">
         <Image
           src={image}
           alt={title}
           fill
-          sizes="(max-width: 768px) 100vw, 33vw"
+          sizes="(max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
+          loading="lazy"
+          decoding="async"
           className="object-cover transition-transform duration-700 group-hover:scale-110"
         />
         <div className="absolute inset-0 bg-linear-to-t from-black/55 via-black/10 to-transparent opacity-80 transition-opacity duration-300 group-hover:opacity-90" />
@@ -44,17 +45,17 @@ export function ProductCard({ title, price, image, tag, index = 0 }: ProductCard
         </div>
       </Link>
 
-      <div className="flex items-center justify-between border-t border-black/10 px-4 py-4">
+      <div className="flex items-center justify-between border-t border-black/10 px-3 py-3 sm:px-4 sm:py-4">
         <div className="flex gap-2 text-black/60">
-          <button className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 transition hover:border-black hover:text-black">
+          <button className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-black/10 transition hover:border-black hover:text-black active:scale-95" aria-label="Add to wishlist">
             <FiHeart className="h-4 w-4" />
           </button>
-          <button className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 transition hover:border-black hover:text-black">
+          <button className="hidden sm:inline-flex h-11 w-11 items-center justify-center rounded-full border border-black/10 transition hover:border-black hover:text-black active:scale-95" aria-label="Quick view">
             <FiEye className="h-4 w-4" />
           </button>
         </div>
-        <button className="inline-flex items-center gap-2 rounded-full bg-black px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-white transition hover:bg-[#f97316]">
-          <FiShoppingBag className="h-3.5 w-3.5" /> Add to Cart
+        <button className="inline-flex items-center gap-1.5 rounded-full bg-black px-3 py-2.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-[#f97316] active:scale-95 sm:px-4 sm:text-xs sm:tracking-[0.24em]">
+          <FiShoppingBag className="h-3.5 w-3.5" /><span className="hidden xs:inline sm:inline">Add to Cart</span><span className="xs:hidden sm:hidden">Add</span>
         </button>
       </div>
     </motion.article>

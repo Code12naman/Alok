@@ -19,8 +19,8 @@ export function SectionHeading({ label, title, description, align = "left" }: Se
       className={`flex flex-col gap-4 ${alignClassName}`}
     >
       <p className="text-xs font-semibold uppercase tracking-[0.36em] text-[#f97316]">{label}</p>
-      <h2 className="max-w-4xl text-4xl leading-[0.9] text-black sm:text-5xl lg:text-7xl">{title}</h2>
-      <p className="max-w-2xl text-sm leading-7 text-black/65 sm:text-base">{description}</p>
+      <h2 className="max-w-4xl text-[clamp(1.75rem,7.5vw,3.5rem)] leading-[0.9] text-black lg:text-7xl">{title}</h2>
+      <p className="max-w-2xl text-sm leading-relaxed text-black/65">{description}</p>
     </motion.div>
   );
 }
