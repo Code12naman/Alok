@@ -89,7 +89,7 @@ export default function OrdersPage() {
                           value={order.status}
                           onChange={e => handleStatusChange(order.id!, e.target.value as OrderStatus)}
                           disabled={updating === order.id}
-                          className={`text-xs px-2.5 py-1.5 rounded-full border font-medium focus:outline-none cursor-pointer appearance-none pr-6 ${STATUS_COLORS[order.status] || ""} bg-transparent`}
+                          className={`text-xs px-2.5 py-1.5 rounded-full border font-medium focus:outline-none cursor-pointer appearance-none pr-6 ${STATUS_COLORS[order.status || "Pending"] || ""} bg-transparent`}
                         >
                           {STATUSES.map(s => <option key={s} value={s} className="bg-[#141414] text-white">{s}</option>)}
                         </select>

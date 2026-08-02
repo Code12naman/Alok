@@ -168,13 +168,22 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                   </span>
                 </div>
 
-                <Link
-                  href="/checkout"
-                  onClick={onClose}
-                  className="w-full flex items-center justify-center gap-2 bg-[#F4512C] hover:bg-[#DD3F1E] text-white font-bold text-sm py-3.5 rounded-xl shadow-sm transition-all"
-                >
-                  Proceed to Checkout <ArrowRight className="h-4 w-4" />
-                </Link>
+                <div className="flex gap-2">
+                  <Link
+                    href="/cart"
+                    onClick={onClose}
+                    className="flex-1 flex items-center justify-center bg-[#F7F7F5] border border-[#E6E6E3] hover:bg-gray-100 text-[#111111] font-bold text-xs py-3.5 rounded-xl transition-all"
+                  >
+                    View Cart Page
+                  </Link>
+                  <Link
+                    href="/checkout"
+                    onClick={onClose}
+                    className="flex-1 flex items-center justify-center gap-1.5 bg-[#F4512C] hover:bg-[#DD3F1E] text-white font-bold text-xs py-3.5 rounded-xl shadow-sm transition-all"
+                  >
+                    Checkout <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
               </div>
             )}
           </motion.aside>

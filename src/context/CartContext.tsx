@@ -5,8 +5,14 @@ import React, {
   useContext,
   useReducer,
   useEffect,
+  useState,
   ReactNode,
 } from "react";
+import { useAuth } from "./AuthContext";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db } from "../firebase/config";
+import { Check } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 
 export interface CartItem {
   productId: string;
@@ -34,10 +40,12 @@ interface CartContextType {
   items: CartItem[];
   cartCount: number;
   cartTotal: number;
+  toastMessage: string | null;
   addItem: (item: Omit<CartItem, "quantity"> & { quantity?: number }) => void;
   removeItem: (productId: string, size?: string, color?: string) => void;
   updateQuantity: (productId: string, qty: number, size?: string, color?: string) => void;
   clearCart: () => void;
+  showToast: (msg?: string) => void;
 }
 
 const STORAGE_KEY = "street-mode-cart-v1";
@@ -86,15 +94,27 @@ const CartContext = createContext<CartContextType>({
   items: [],
   cartCount: 0,
   cartTotal: 0,
+  toastMessage: null,
   addItem: () => {},
   removeItem: () => {},
   updateQuantity: () => {},
   clearCart: () => {},
+  showToast: () => {},
 });
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(cartReducer, { items: [] });
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const { user } = useAuth();
 
+  const showToast = (msg: string = "Added to cart ✓") => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage(null);
+    }, 3000);
+  };
+
+  // Local Storage Hydration on mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -109,19 +129,58 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Firestore Sync & Merge on user login
+  useEffect(() => {
+    if (!user) return;
+    const syncFirestoreCart = async () => {
+      try {
+        const cartRef = doc(db, "users", user.uid, "cart", "default");
+        const snap = await getDoc(cartRef);
+        if (snap.exists()) {
+          const remoteItems = (snap.data().items as CartItem[]) || [];
+          if (remoteItems.length > 0 && state.items.length === 0) {
+            dispatch({ type: "HYDRATE", payload: remoteItems });
+          } else if (state.items.length > 0) {
+            // Push local items to firestore
+            await setDoc(cartRef, { items: state.items, updatedAt: new Date() });
+          }
+        } else if (state.items.length > 0) {
+          await setDoc(cartRef, { items: state.items, updatedAt: new Date() });
+        }
+      } catch (e) {
+        console.error("Error syncing cart with Firestore:", e);
+      }
+    };
+    syncFirestoreCart();
+  }, [user]);
+
+  // Persist on change (localStorage & Firestore if logged in)
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state.items));
     } catch {
       // ignore
     }
-  }, [state.items]);
+    if (user) {
+      const saveToDb = async () => {
+        try {
+          const cartRef = doc(db, "users", user.uid, "cart", "default");
+          await setDoc(cartRef, { items: state.items, updatedAt: new Date() });
+        } catch (e) {
+          console.error("Failed saving cart to Firestore:", e);
+        }
+      };
+      saveToDb();
+    }
+  }, [state.items, user]);
 
   const cartCount = state.items.reduce((sum, i) => sum + i.quantity, 0);
   const cartTotal = state.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
 
-  const addItem = (item: Omit<CartItem, "quantity"> & { quantity?: number }) =>
+  const addItem = (item: Omit<CartItem, "quantity"> & { quantity?: number }) => {
     dispatch({ type: "ADD_ITEM", payload: { ...item, quantity: item.quantity ?? 1 } });
+    showToast("Added to cart ✓");
+  };
 
   const removeItem = (productId: string, size?: string, color?: string) =>
     dispatch({ type: "REMOVE_ITEM", payload: { productId, size, color } });
@@ -133,11 +192,39 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   return (
     <CartContext.Provider
-      value={{ items: state.items, cartCount, cartTotal, addItem, removeItem, updateQuantity, clearCart }}
+      value={{
+        items: state.items,
+        cartCount,
+        cartTotal,
+        toastMessage,
+        addItem,
+        removeItem,
+        updateQuantity,
+        clearCart,
+        showToast,
+      }}
     >
       {children}
+
+      {/* Floating Toast Notification */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: 30, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-[#111111] text-white px-5 py-3.5 rounded-2xl shadow-xl border border-white/10"
+          >
+            <div className="h-6 w-6 rounded-full bg-[#F4512C] text-white flex items-center justify-center font-bold text-xs">
+              <Check className="h-3.5 w-3.5" />
+            </div>
+            <span className="text-xs font-bold tracking-wide">{toastMessage}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </CartContext.Provider>
   );
 }
 
 export const useCart = () => useContext(CartContext);
+
