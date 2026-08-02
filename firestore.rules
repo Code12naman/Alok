@@ -18,10 +18,11 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Products: Anyone can read, only admin can create/update/delete
+    // Products: Anyone can read, only admin can create/delete; authenticated user can update stock on purchase
     match /products/{productId} {
       allow read: if true;
-      allow write, create, update, delete: if isAdmin();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || isAuthenticated();
     }
 
     // Categories: Anyone can read, only admin can create/update/delete
@@ -41,13 +42,30 @@ service cloud.firestore {
       allow update: if isAdmin()
                     || (isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])));
       allow delete: if isAdmin();
+
+      // Subcollections under users (cart, addresses, wishlist, etc.)
+      match /cart/{cartId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+
+      match /addresses/{addressId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+
+      match /wishlist/{itemId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+
+      match /{subcollection=**} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
     }
 
     // Orders:
     // - User can read/create their own orders
     // - Admin can read/write all orders
     match /orders/{orderId} {
-      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin();
     }
