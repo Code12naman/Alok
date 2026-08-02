@@ -54,7 +54,7 @@ export function EditorialHero() {
           poster="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&q=80&w=1200"
           className="h-full w-full object-cover object-center brightness-110 lg:brightness-125"
         >
-          <source src="/videos/jessiejiranzhai_pindown.io_1785598803.mp4" type="video/mp4" />
+          <source src="/videos/add_more_scene_like_this.mp4" type="video/mp4" />
         </video>
         {/* Gradient overlay for text readability on mobile */}
         <div className="absolute inset-0 bg-linear-to-t from-black/70 via-black/20 to-black/10 lg:hidden" />
