@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { addProduct, FirestoreProduct } from "@/services/productService";
+import { auth } from "@/firebase/config";
 import { getCategories, FirestoreCategory } from "@/services/categoryService";
 import { uploadFile } from "@/services/storageService";
 import {
@@ -165,12 +166,14 @@ export default function AddProductPage() {
           copy[i] = { ...copy[i], url, uploaded: true, progress: 100 };
           return copy;
         });
-      } catch {
+      } catch (err: any) {
+        console.error("STORAGE UPLOAD ERROR:", err);
         setImages((prev) => {
           const copy = [...prev];
-          copy[i] = { ...copy[i], error: "Upload failed" };
+          copy[i] = { ...copy[i], error: err?.message || "Upload failed" };
           return copy;
         });
+        throw new Error(`Firebase Storage Upload Error: ${err?.message || "Unknown storage failure"}`);
       }
     }
     return urls;
@@ -182,6 +185,12 @@ export default function AddProductPage() {
     if (!form.stock) { setToast({ type: "error", msg: "Stock quantity is required." }); return; }
     if (!form.category) { setToast({ type: "error", msg: "Category is required." }); return; }
 
+    if (!auth.currentUser) {
+      console.error("PRODUCT SAVE ERROR: Firebase auth user is null");
+      setToast({ type: "error", msg: "Authentication error: You are not signed in to Firebase." });
+      return;
+    }
+
     setSaving(true);
     setToast(null);
 
@@ -191,23 +200,23 @@ export default function AddProductPage() {
       const imageUrls = await uploadImages(tempId);
       const thumbnail = imageUrls[thumbnailIndex] || imageUrls[0] || "";
 
-      const productData: Omit<FirestoreProduct, "id"> = {
+      const productData: Partial<FirestoreProduct> = {
         name: form.name.trim(),
         slug,
-        sku: form.sku.trim() || undefined,
-        shortDescription: form.shortDescription.trim() || undefined,
-        description: form.description.trim() || undefined,
-        category: form.category,
-        subcategory: form.subcategory || undefined,
-        price: parseFloat(form.price),
+        sku: form.sku.trim(),
+        shortDescription: form.shortDescription.trim(),
+        description: form.description.trim(),
+        category: form.category.trim(),
+        subcategory: form.subcategory.trim(),
+        price: form.price ? parseFloat(form.price) : 0,
         compareAtPrice: form.compareAtPrice ? parseFloat(form.compareAtPrice) : undefined,
         discountPercentage: form.discountPercentage ? parseFloat(form.discountPercentage) : undefined,
-        stock: parseInt(form.stock),
+        stock: form.stock ? parseInt(form.stock) : 0,
         sizes: form.sizes,
         colors: form.colors,
-        material: form.material || undefined,
-        fit: form.fit || undefined,
-        careInstructions: form.careInstructions || undefined,
+        material: form.material.trim(),
+        fit: form.fit.trim(),
+        careInstructions: form.careInstructions.trim(),
         images: imageUrls,
         thumbnail,
         tags: form.tags,
@@ -219,11 +228,15 @@ export default function AddProductPage() {
         limitedDrop: form.limitedDrop,
       };
 
-      await addProduct(productData);
+      await addProduct(productData as Omit<FirestoreProduct, "id">);
       setToast({ type: "success", msg: `Product ${status === "active" ? "published" : "saved as draft"} successfully!` });
       setTimeout(() => router.push("/admin/products"), 1200);
-    } catch (e) {
-      setToast({ type: "error", msg: "Failed to save product. Check Firestore permissions." });
+    } catch (e: any) {
+      console.error("PRODUCT SAVE ERROR:", e?.code, e?.message, e);
+      setToast({
+        type: "error",
+        msg: e?.message || "Failed to save product. Please check console for details."
+      });
     } finally {
       setSaving(false);
     }

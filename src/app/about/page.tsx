@@ -1,110 +1,90 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { motion } from "framer-motion";
+import { ArrowRight, Sparkles, ShieldCheck, Heart } from "lucide-react";
 
 export default function AboutPage() {
   return (
-    <div className="min-h-screen bg-background">
-      {/* Hero Section */}
-      <section className="relative h-[60vh] flex items-center justify-center overflow-hidden">
-        <Image
-          src="https://images.unsplash.com/photo-1541701494587-cb58502866ab?auto=format&fit=crop&q=80&w=2000"
-          alt="About Us Hero"
-          fill
-          className="object-cover opacity-60 mix-blend-overlay"
-          priority
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/20 to-transparent" />
-        <div className="container relative z-10 mx-auto px-4 text-center">
-          <motion.h1 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="text-5xl md:text-7xl font-bold tracking-tighter mb-4"
-          >
-            Our Story
-          </motion.h1>
-          <motion.p 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto"
-          >
-            Redefining premium essentials for the modern world.
-          </motion.p>
-        </div>
-      </section>
+    <div className="min-h-screen bg-[#F7F7F5] py-12">
+      <div className="mx-auto max-w-[1440px] px-4 md:px-8 space-y-16">
+        
+        {/* Hero Section */}
+        <section className="bg-white rounded-3xl p-8 md:p-16 border border-[#E6E6E3] shadow-xs relative overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+            <div className="lg:col-span-6 space-y-4 text-left">
+              <span className="inline-block text-[11px] font-bold tracking-wider text-[#F4512C] uppercase bg-[#FFF3F0] px-3 py-1 rounded-full border border-[#F4512C]/20">
+                OUR STORY
+              </span>
+              <h1 className="font-extrabold text-3xl sm:text-4xl lg:text-5xl text-[#111111] leading-tight">
+                Redefining Everyday <br />
+                <span className="text-[#F4512C]">Essentials & Fashion</span>
+              </h1>
+              <p className="text-xs md:text-sm text-gray-600 leading-relaxed font-medium">
+                Founded in 2026, STREET MODE was born out of a passion to deliver high-spec products that bridge contemporary design with functional elegance. We source high quality materials globally to ensure every product brings value to your lifestyle.
+              </p>
+              <div className="pt-2">
+                <Link
+                  href="/shop"
+                  className="inline-flex items-center gap-2 bg-[#F4512C] hover:bg-[#DD3F1E] text-white text-xs font-bold px-6 py-3.5 rounded-xl shadow-xs transition-colors"
+                >
+                  Explore Our Shop <ArrowRight className="h-4 w-4" />
+                </Link>
+              </div>
+            </div>
 
-      {/* Content Section */}
-      <section className="py-24 container mx-auto px-4 md:px-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
-          <motion.div
-            initial={{ opacity: 0, x: -30 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-          >
-            <h2 className="text-3xl md:text-5xl font-bold tracking-tighter mb-6 leading-tight">
-              Craftsmanship <br />Meets Innovation.
-            </h2>
-            <p className="text-lg text-muted-foreground leading-relaxed mb-6">
-              Founded in 2026, LUXE was born out of a desire to create everyday products that don't compromise on quality or design. We believe that the objects you interact with daily should bring joy and elevate your lifestyle.
-            </p>
-            <p className="text-lg text-muted-foreground leading-relaxed">
-              Our team of designers and engineers work tirelessly to source the finest materials globally, ensuring that every product we offer is built to last a lifetime. Sustainable practices and ethical manufacturing are at the core of everything we do.
-            </p>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, x: 30 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="relative aspect-square md:aspect-[4/5] rounded-3xl overflow-hidden"
-          >
-            <Image
-              src="https://images.unsplash.com/photo-1618220179428-22790b461013?auto=format&fit=crop&q=80&w=1000"
-              alt="Craftsmanship"
-              fill
-              className="object-cover"
-            />
-          </motion.div>
-        </div>
-      </section>
-
-      {/* Values Section */}
-      <section className="py-24 bg-muted/30">
-        <div className="container mx-auto px-4 md:px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-5xl font-bold tracking-tighter mb-4">Our Values</h2>
-            <p className="text-lg text-muted-foreground">The principles that guide our design and business.</p>
+            <div className="lg:col-span-6 relative aspect-[4/3] rounded-2xl overflow-hidden border border-[#E6E6E3] bg-[#F7F7F5]">
+              <Image
+                src="https://images.unsplash.com/photo-1541701494587-cb58502866ab?auto=format&fit=crop&q=80&w=1200"
+                alt="About us"
+                fill
+                className="object-cover"
+              />
+            </div>
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        </section>
+
+        {/* Pillars */}
+        <section className="space-y-6">
+          <div className="text-center max-w-md mx-auto">
+            <h2 className="font-extrabold text-2xl text-[#111111] tracking-tight">Our Core Principles</h2>
+            <p className="text-xs text-gray-500 font-medium mt-1">The values that guide every product we curate.</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {[
-              { title: "Simplicity", desc: "We strip away the unnecessary, focusing only on what truly matters to deliver pure, intuitive experiences." },
-              { title: "Durability", desc: "Creating products that withstand the test of time, reducing waste and encouraging a 'buy less, buy better' philosophy." },
-              { title: "Transparency", desc: "From pricing to production methods, we are completely open about how our products are made." }
-            ].map((value, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: i * 0.1 }}
-                className="bg-card border border-border p-8 rounded-2xl"
-              >
-                <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-6">
-                  <span className="text-primary font-bold text-xl">{i + 1}</span>
+              {
+                icon: Sparkles,
+                title: "Curated Design",
+                desc: "We focus on clean, intuitive designs that enhance daily life without clutter.",
+              },
+              {
+                icon: ShieldCheck,
+                title: "Uncompromising Quality",
+                desc: "Sourced from top manufacturers using durable, sustainably conscious materials.",
+              },
+              {
+                icon: Heart,
+                title: "Customer First",
+                desc: "100% satisfaction guarantee with 24/7 dedicated customer care.",
+              },
+            ].map((item, i) => {
+              const Icon = item.icon;
+              return (
+                <div key={i} className="bg-white p-6 rounded-2xl border border-[#E6E6E3] shadow-xs text-left">
+                  <div className="h-10 w-10 bg-[#FFF3F0] text-[#F4512C] rounded-xl flex items-center justify-center mb-4">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="font-bold text-sm text-[#111111] mb-2">{item.title}</h3>
+                  <p className="text-xs text-gray-500 leading-relaxed font-medium">{item.desc}</p>
                 </div>
-                <h3 className="text-2xl font-bold mb-4">{value.title}</h3>
-                <p className="text-muted-foreground leading-relaxed">{value.desc}</p>
-              </motion.div>
-            ))}
+              );
+            })}
           </div>
-        </div>
-      </section>
+        </section>
+
+      </div>
     </div>
   );
 }

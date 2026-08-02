@@ -1,0 +1,61 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Products: Anyone can read, only admin can create/update/delete
+    match /products/{productId} {
+      allow read: if true;
+      allow write, create, update, delete: if isAdmin();
+    }
+
+    // Categories: Anyone can read, only admin can create/update/delete
+    match /categories/{catId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Users:
+    // - Authenticated user can read/update their own profile (cannot set/change role to "admin")
+    // - Admin can read/write any user document
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated()
+                    && isOwner(userId)
+                    && (!request.resource.data.keys().hasAll(['role']) || request.resource.data.role != 'admin' || isAdmin());
+      allow update: if isAdmin()
+                    || (isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])));
+      allow delete: if isAdmin();
+    }
+
+    // Orders:
+    // - User can read/create their own orders
+    // - Admin can read/write all orders
+    match /orders/{orderId} {
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Coupons: Anyone can read active coupons, only admin can manage
+    match /coupons/{couponId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}

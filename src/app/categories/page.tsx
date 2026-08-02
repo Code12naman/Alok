@@ -2,63 +2,93 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
+import { getCategories, FirestoreCategory } from "@/services/categoryService";
 import { ArrowRight } from "lucide-react";
-import { mockCategories } from "@/lib/mock-data";
+import { FiLoader } from "react-icons/fi";
+
+const defaultCategories = [
+  { name: "Fashion", image: "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&q=80&w=800" },
+  { name: "Electronics", image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=800" },
+  { name: "Beauty", image: "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&q=80&w=800" },
+  { name: "Fitness", image: "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&q=80&w=800" },
+  { name: "Home Decor", image: "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&q=80&w=800" },
+  { name: "Accessories", image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=800" },
+];
 
 export default function CategoriesPage() {
-  return (
-    <div className="pt-32 pb-24 min-h-screen bg-background">
-      <div className="container mx-auto px-4 md:px-6">
-        
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="text-center max-w-3xl mx-auto mb-16"
-        >
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tighter mb-6">Explore Categories</h1>
-          <p className="text-muted-foreground text-lg">
-            Discover our meticulously curated collections, designed to elevate every aspect of your daily life.
-          </p>
-        </motion.div>
+  const [categories, setCategories] = useState<FirestoreCategory[]>([]);
+  const [loading, setLoading] = useState(true);
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {mockCategories.map((category, i) => (
-            <motion.div 
-              key={category.id}
-              initial={{ opacity: 0, y: 50 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: i * 0.1 }}
-            >
-              <Link href={`/shop`} className="group relative block h-[500px] md:h-[600px] rounded-3xl overflow-hidden">
-                <Image 
-                  src={category.image} 
-                  alt={category.name} 
-                  fill 
-                  className="object-cover transition-transform duration-1000 group-hover:scale-110"
+  useEffect(() => {
+    getCategories()
+      .then((cats) => setCategories(cats.filter((c) => c.active)))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const displayCats =
+    categories.length > 0
+      ? categories.map((c, i) => ({
+          id: c.id,
+          name: c.name,
+          image: c.image || defaultCategories[i % defaultCategories.length].image,
+        }))
+      : defaultCategories;
+
+  return (
+    <div className="min-h-screen bg-[#F7F7F5] py-12">
+      <div className="mx-auto max-w-[1440px] px-4 md:px-8">
+        
+        <div className="mb-10 text-center max-w-xl mx-auto">
+          <span className="text-xs font-bold text-[#F4512C] uppercase tracking-wider block mb-1">
+            Collections
+          </span>
+          <h1 className="font-extrabold text-3xl md:text-5xl text-[#111111] tracking-tight mb-3">
+            Shop by Categories
+          </h1>
+          <p className="text-xs md:text-sm text-gray-500 font-medium leading-relaxed">
+            Discover our curated collections designed to elevate every aspect of your lifestyle.
+          </p>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center h-64 bg-white rounded-3xl border border-[#E6E6E3]">
+            <FiLoader className="h-8 w-8 text-[#F4512C] animate-spin" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {displayCats.map((cat) => (
+              <Link
+                key={cat.name}
+                href={`/shop?category=${encodeURIComponent(cat.name)}`}
+                className="group relative h-[360px] rounded-3xl overflow-hidden shadow-xs border border-[#E6E6E3] block"
+              >
+                <Image
+                  src={cat.image}
+                  alt={cat.name}
+                  fill
+                  className="object-cover transition-transform duration-700 group-hover:scale-105"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent opacity-70 group-hover:opacity-80 transition-opacity" />
-                
-                <div className="absolute inset-0 p-10 md:p-14 flex flex-col justify-end">
-                  <div className="translate-y-8 group-hover:translate-y-0 transition-transform duration-500 ease-out">
-                    <span className="text-white/70 text-sm font-bold tracking-widest uppercase mb-3 block">
-                      Collection
-                    </span>
-                    <h2 className="text-white text-4xl md:text-5xl font-bold mb-6">
-                      {category.name}
-                    </h2>
-                    
-                    <div className="inline-flex items-center gap-3 text-white border border-white/30 rounded-full px-6 py-3 backdrop-blur-md hover:bg-white hover:text-black transition-all duration-300">
-                      <span className="font-medium">Shop Now</span>
-                      <ArrowRight className="w-5 h-5" />
-                    </div>
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
+
+                <div className="absolute inset-0 p-8 flex flex-col justify-end text-white">
+                  <span className="text-[11px] font-bold text-gray-300 uppercase tracking-widest mb-1">
+                    Collection
+                  </span>
+                  <h2 className="font-extrabold text-3xl mb-4 text-white">
+                    {cat.name}
+                  </h2>
+                  <div className="inline-flex items-center gap-2 text-xs font-bold text-white bg-white/20 backdrop-blur-md px-5 py-2.5 rounded-xl border border-white/30 w-fit group-hover:bg-[#F4512C] group-hover:border-[#F4512C] transition-all">
+                    <span>Shop Now</span>
+                    <ArrowRight className="h-4 w-4" />
                   </div>
                 </div>
               </Link>
-            </motion.div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
+
       </div>
     </div>
   );

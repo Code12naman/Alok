@@ -25,31 +25,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        setUser(firebaseUser);
-        try {
-          // Add a 5 second timeout to prevent endless loading if Firestore is offline
-          const rolePromise = getUserRole(firebaseUser.uid, firebaseUser.email);
-          const timeoutPromise = new Promise<null>((_, reject) => 
-            setTimeout(() => reject(new Error("Timeout fetching role")), 5000)
-          );
-          
-          const userRole = await Promise.race([rolePromise, timeoutPromise]);
-          setRole(userRole as UserRole | null);
-        } catch (err) {
-          console.error("AuthContext: failed to fetch role (timeout or error)", err);
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      async (firebaseUser) => {
+        setLoading(true);
+        if (firebaseUser) {
+          setUser(firebaseUser);
+          try {
+            const userRole = await getUserRole(firebaseUser.uid);
+            setRole(userRole);
+          } catch (err) {
+            console.error("AuthContext: failed to fetch role", err);
+            setRole(null);
+          }
+        } else {
+          setUser(null);
           setRole(null);
         }
-      } else {
+        setLoading(false);
+      },
+      (error) => {
+        console.error("AuthContext: auth error", error);
         setUser(null);
         setRole(null);
+        setLoading(false);
       }
-      setLoading(false);
-    }, (error) => {
-      console.error("AuthContext: auth error", error);
-      setLoading(false);
-    });
+    );
 
     return () => unsubscribe();
   }, []);

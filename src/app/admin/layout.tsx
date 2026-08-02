@@ -128,7 +128,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const isLoginPage = pathname === "/admin/login";
+  const isLoginPage = pathname === "/admin" || pathname === "/admin/login";
   const isForbiddenPage = pathname === "/admin/forbidden";
 
   if (isLoginPage || isForbiddenPage) {

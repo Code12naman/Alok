@@ -176,8 +176,8 @@ export function EditorialHero() {
                 index === 1
                   ? "translate-x-5"
                   : index === 2
-                  ? "col-start-2 translate-x-2"
-                  : "col-start-1"
+                    ? "col-start-2 translate-x-2"
+                    : "col-start-1"
               }
             >
               <FloatingProductCard {...product} delay={0.35 + index * 0.16} />

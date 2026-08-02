@@ -47,30 +47,18 @@ export const checkAndCreateUserDoc = async (
 /**
  * Fetches the user role from Firestore.
  */
-export const getUserRole = async (uid: string, email?: string | null): Promise<UserRole | null> => {
+export const getUserRole = async (uid: string): Promise<UserRole | null> => {
   try {
-    // Temporary fallback for the requested admin credentials in case Firestore is unreachable
-    if (email === "admin@123.com" || auth.currentUser?.email === "admin@123.com") {
-      return "admin";
-    }
-
     const userRef = doc(db, "users", uid);
-    
-    // Add a 5 second timeout directly to the Firestore call
-    const docPromise = getDoc(userRef);
-    const timeoutPromise = new Promise<null>((_, reject) => 
-      setTimeout(() => reject(new Error("Firestore timeout")), 5000)
-    );
-    
-    const userSnap = await Promise.race([docPromise, timeoutPromise]) as any;
+    const userSnap = await getDoc(userRef);
 
-    if (userSnap && userSnap.exists()) {
+    if (userSnap.exists()) {
       const data = userSnap.data();
-      return data.role as UserRole;
+      return (data.role as UserRole) || null;
     }
     return null;
   } catch (error) {
-    console.error("Error fetching user role:", error);
+    console.error("Error fetching user role from Firestore:", error);
     return null;
   }
 };

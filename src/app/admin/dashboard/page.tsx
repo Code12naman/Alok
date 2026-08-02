@@ -7,6 +7,8 @@ import { FiBox, FiShoppingCart, FiDollarSign, FiUsers, FiClock, FiAlertTriangle,
 import { motion } from "framer-motion";
 import Link from "next/link";
 
+import { useAuth } from "@/context/AuthContext";
+
 interface Stats {
   products: number;
   orders: number;
@@ -16,11 +18,15 @@ interface Stats {
 }
 
 export default function AdminDashboard() {
+  const { user, role, loading: authLoading } = useAuth();
   const [stats, setStats] = useState<Stats>({ products: 0, orders: 0, customers: 0, pendingOrders: 0, lowStock: 0 });
-  const [loading, setLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   useEffect(() => {
-    async function fetch() {
+    if (authLoading || !user || role !== "admin") return;
+
+    async function fetchStats() {
+      setStatsLoading(true);
       try {
         const [products, orders, users, pendingOrders] = await Promise.allSettled([
           getCountFromServer(collection(db, "products")),
@@ -39,11 +45,13 @@ export default function AdminDashboard() {
       } catch (e) {
         console.error("Dashboard stats error:", e);
       } finally {
-        setLoading(false);
+        setStatsLoading(false);
       }
     }
-    fetch();
-  }, []);
+    fetchStats();
+  }, [user, role, authLoading]);
+
+  const isLoading = authLoading || statsLoading;
 
   const cards = [
     { title: "Total Products", value: stats.products, icon: FiBox, color: "text-blue-400", bg: "bg-blue-500/10", href: "/admin/products" },
@@ -79,7 +87,7 @@ export default function AdminDashboard() {
               </div>
               <p className="text-white/50 text-xs mb-1">{card.title}</p>
               <p className="text-3xl font-bold font-display tracking-wider">
-                {loading ? <span className="text-white/20">—</span> : card.value}
+                {isLoading ? <span className="text-white/20">—</span> : card.value}
               </p>
             </Link>
           </motion.div>

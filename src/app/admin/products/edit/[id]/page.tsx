@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { getProductById, updateProduct, FirestoreProduct } from "@/services/productService";
+import { auth } from "@/firebase/config";
 import { getCategories, FirestoreCategory } from "@/services/categoryService";
 import { uploadFile } from "@/services/storageService";
 import { FiLoader, FiCheck, FiAlertCircle, FiStar, FiTrash2, FiImage, FiX } from "react-icons/fi";
@@ -73,6 +74,11 @@ export default function EditProductPage() {
       setToast({ type: "error", msg: "Name, price, and category are required." });
       return;
     }
+    if (!auth.currentUser) {
+      console.error("PRODUCT UPDATE ERROR: Firebase auth user is null");
+      setToast({ type: "error", msg: "Authentication error: You are not signed in to Firebase." });
+      return;
+    }
     setSaving(true);
     try {
       const urls: string[] = [];
@@ -88,8 +94,9 @@ export default function EditProductPage() {
       await updateProduct(id, { ...form, images: urls, thumbnail } as Partial<FirestoreProduct>);
       setToast({ type: "success", msg: "Product updated!" });
       setTimeout(() => router.push("/admin/products"), 1000);
-    } catch {
-      setToast({ type: "error", msg: "Failed to update product." });
+    } catch (err: any) {
+      console.error("PRODUCT UPDATE ERROR:", err?.code, err?.message, err);
+      setToast({ type: "error", msg: err?.message || "Failed to update product." });
     } finally {
       setSaving(false);
     }

@@ -2,16 +2,16 @@
 
 import { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/firebase/config";
-import { getUserRole } from "@/services/authService";
+import { app, auth, db } from "@/firebase/config";
+import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { FiEye, FiEyeOff, FiLock, FiMail } from "react-icons/fi";
 import { Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function AdminLogin() {
-  const [email, setEmail] = useState("admin@123.com");
-  const [password, setPassword] = useState("12345678");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -22,47 +22,67 @@ export default function AdminLogin() {
     setLoading(true);
     setError("");
 
+    console.log("LOGIN START");
+    console.log("Firebase projectId:", app.options.projectId);
+
     try {
-      let userCredential;
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log("LOGIN SUCCESS");
+      console.log("AUTH UID:", userCredential.user.uid);
+      console.log("AUTH EMAIL:", userCredential.user.email);
+      console.log("auth.currentUser:", auth.currentUser?.uid);
+
+      const uid = userCredential.user.uid;
+      const userRef = doc(db, "users", uid);
+      console.log("READING ADMIN ROLE FOR UID:", uid, "AT PATH:", userRef.path);
+
+      let snapshot;
       try {
-        // Try to sign in first
-        userCredential = await signInWithEmailAndPassword(auth, email, password);
-      } catch (signInErr: any) {
-        // If user not found and it's the requested admin credentials, create it automatically
-        if (
-          (signInErr.code === "auth/user-not-found" || signInErr.code === "auth/invalid-credential") &&
-          email === "admin@123.com"
-        ) {
-          const { createUserWithEmailAndPassword } = await import("firebase/auth");
-          const { doc, setDoc } = await import("firebase/firestore");
-          const { db } = await import("@/firebase/config");
-          
-          userCredential = await createUserWithEmailAndPassword(auth, email, password);
-          
-          // Try to save role to Firestore, but don't block if Firestore is offline
-          const setDocPromise = setDoc(doc(db, "users", userCredential.user.uid), {
-            uid: userCredential.user.uid,
-            name: "Admin User",
-            email: email,
-            role: "admin"
-          });
-          const setDocTimeout = new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore timeout")), 2000));
-          await Promise.race([setDocPromise, setDocTimeout]).catch(e => console.warn("Could not save to Firestore, continuing anyway", e));
-        } else {
-          throw signInErr;
-        }
+        snapshot = await getDoc(userRef);
+        console.log("USER DOC EXISTS:", snapshot.exists());
+        console.log("USER DATA:", snapshot.data());
+      } catch (firestoreErr: any) {
+        console.error("ROLE READ ERROR:", firestoreErr);
+        console.error("Firebase error code:", firestoreErr?.code);
+        console.error("Firebase error message:", firestoreErr?.message);
+
+        // Do NOT show "Unauthorized admin account" for Condition B (Firestore permission/read error)
+        setError(`Unable to verify admin role due to a Firestore error: ${firestoreErr?.message || firestoreErr?.code || "Permission denied"}`);
+        return;
       }
 
-      const role = await getUserRole(userCredential.user.uid, email);
-      
-      if (role !== "admin") {
+      if (!snapshot.exists()) {
+        console.error("ROLE READ ERROR: User document does not exist in Firestore for UID:", uid);
         await auth.signOut();
-        setError("You do not have permission to access the admin portal.");
+        setError(`Admin profile document missing in Firestore (users/${uid}).`);
+        return;
+      }
+
+      const data = snapshot.data();
+      const role = data?.role;
+
+      if (role !== "admin") {
+        console.warn(`USER ROLE IS '${role}', NOT 'admin'. ACCESS DENIED.`);
+        await auth.signOut();
+        setError("Unauthorized admin account. You do not have permission to access the admin portal.");
       } else {
+        console.log("ADMIN ROLE VERIFIED SUCCESSFULLY. REDIRECTING TO DASHBOARD...");
         router.push("/admin/dashboard");
       }
     } catch (err: any) {
-      setError("Invalid credentials. Please try again.");
+      console.error("ADMIN LOGIN ERROR:", err?.code, err?.message, err);
+      if (
+        err?.code === "auth/invalid-credential" ||
+        err?.code === "auth/user-not-found" ||
+        err?.code === "auth/wrong-password" ||
+        err?.code === "auth/invalid-email"
+      ) {
+        setError("Invalid email or password. Please try again.");
+      } else if (err?.code === "auth/too-many-requests") {
+        setError("Too many failed attempts. Please try again later.");
+      } else {
+        setError(err?.message || "Failed to sign in. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

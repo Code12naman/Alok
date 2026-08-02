@@ -1,3 +1,5 @@
+import AdminLogin from "./login/page";
+
 export default function AdminPage() {
-  return null; // The layout and AdminProtectedRoute handle redirection
+  return <AdminLogin />;
 }
