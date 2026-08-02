@@ -48,28 +48,9 @@ export function HeroSection() {
         preload="metadata"
         poster="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&q=80&w=1400"
         className="absolute inset-0 w-full h-full object-cover object-center z-0 pointer-events-none"
-        style={{ filter: "brightness(0.85) contrast(1.05) saturate(0.9)" }}
       >
         <source src="/videos/use_white_background.mp4" type="video/mp4" />
       </video>
-
-      {/* ── 2. CINEMATIC OVERLAY FOR READABILITY ── */}
-      {/* Desktop: Left-heavy gradient overlay */}
-      <div
-        className="absolute inset-0 z-10 pointer-events-none hidden md:block"
-        style={{
-          background:
-            "linear-gradient(90deg, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.52) 35%, rgba(0,0,0,0.2) 65%, rgba(0,0,0,0.05) 100%)",
-        }}
-      />
-      {/* Mobile: Top-to-bottom dark gradient */}
-      <div
-        className="absolute inset-0 z-10 pointer-events-none md:hidden"
-        style={{
-          background:
-            "linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.55) 40%, rgba(0,0,0,0.85) 100%)",
-        }}
-      />
       {/* Bottom smooth fade to next section */}
       <div
         className="absolute bottom-0 inset-x-0 h-16 z-10 pointer-events-none"
