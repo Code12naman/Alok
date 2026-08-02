@@ -50,7 +50,7 @@ export function HeroSection() {
         className="absolute inset-0 w-full h-full object-cover object-center z-0 pointer-events-none"
         style={{ filter: "brightness(0.85) contrast(1.05) saturate(0.9)" }}
       >
-        <source src="/videos/add_more_scene_like_this.mp4" type="video/mp4" />
+        <source src="/videos/use_white_background.mp4" type="video/mp4" />
       </video>
 
       {/* ── 2. CINEMATIC OVERLAY FOR READABILITY ── */}
