@@ -8,6 +8,7 @@ import { ShoppingBag, ArrowRight, ChevronRight, Clock, MapPin, Truck } from "luc
 import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import { getUserOrders, OrderData } from "@/services/orderService";
+import { SafeImage } from "@/components/ui/SafeImage";
 
 export default function MyOrdersPage() {
   const { user, loading: authLoading } = useAuth();
@@ -116,7 +117,7 @@ export default function MyOrdersPage() {
                     <div key={itemIdx} className="flex items-center gap-3">
                       <div className="relative h-14 w-14 rounded-xl overflow-hidden bg-[#F7F7F5] border border-[#E6E6E3] flex-shrink-0">
                         {item.image ? (
-                          <Image src={item.image} alt={item.name} fill className="object-cover" />
+                          <SafeImage src={item.image} alt={item.name} fill sizes="56px" className="object-cover" />
                         ) : (
                           <ShoppingBag className="h-6 w-6 text-gray-300 m-auto" />
                         )}

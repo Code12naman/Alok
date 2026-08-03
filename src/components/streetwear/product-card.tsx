@@ -6,7 +6,8 @@ import { motion } from "framer-motion";
 import { Heart, ShoppingBag, Star } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
-import { FirestoreProduct } from "@/services/productService";
+import { FirestoreProduct, getImageUrl } from "@/services/productService";
+import { SafeImage } from "@/components/ui/SafeImage";
 
 interface ProductCardProps {
   product: FirestoreProduct;
@@ -18,8 +19,9 @@ export function CyberProductCard({ product, index = 0 }: ProductCardProps) {
   const { toggleWishlist, isInWishlist } = useWishlist();
 
   const isOOS = product.status === "out_of_stock" || product.stock === 0;
-  const imageUrl = product.thumbnail || product.images?.[0] || "";
+  const imageUrl = getImageUrl(product.thumbnail) || getImageUrl(product.images?.[0]) || "";
   const isWishlisted = isInWishlist(product.id || "");
+  const productSlug = product.slug || product.id || "";
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -29,7 +31,7 @@ export function CyberProductCard({ product, index = 0 }: ProductCardProps) {
       name: product.name,
       price: product.price,
       image: imageUrl,
-      slug: product.slug,
+      slug: productSlug,
       quantity: 1,
     });
   };
@@ -43,7 +45,7 @@ export function CyberProductCard({ product, index = 0 }: ProductCardProps) {
       price: product.price,
       compareAtPrice: product.compareAtPrice,
       image: imageUrl,
-      slug: product.slug,
+      slug: productSlug,
       category: product.category,
     });
   };
@@ -63,10 +65,10 @@ export function CyberProductCard({ product, index = 0 }: ProductCardProps) {
       className="group flex flex-col bg-white rounded-2xl overflow-hidden border border-[#E6E6E3] hover:shadow-md transition-all duration-300 hover:-translate-y-1 relative"
     >
       {/* ── Image Container ── */}
-      <Link href={`/product/${product.slug}`} className="relative aspect-[4/5] bg-[#F5F5F3] overflow-hidden block">
+      <Link href={`/product/${productSlug}`} className="relative aspect-[4/5] bg-[#F5F5F3] overflow-hidden block">
         {/* Image */}
         {imageUrl ? (
-          <Image
+          <SafeImage
             src={imageUrl}
             alt={product.name}
             fill
@@ -121,7 +123,7 @@ export function CyberProductCard({ product, index = 0 }: ProductCardProps) {
       {/* ── Info Container ── */}
       <div className="p-4 flex flex-col flex-1 justify-between bg-white">
         <div>
-          <Link href={`/product/${product.slug}`}>
+          <Link href={`/product/${productSlug}`}>
             <h3 className="font-semibold text-xs text-[#111111] line-clamp-1 group-hover:text-[#F4512C] transition-colors">
               {product.name}
             </h3>

@@ -5,6 +5,9 @@ import { X, Minus, Plus, ShoppingBag, ArrowRight } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import Image from "next/image";
 import Link from "next/link";
+import { SafeImage } from "@/components/ui/SafeImage";
+
+import { useEffect } from "react";
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -13,6 +16,17 @@ interface CartDrawerProps {
 
 export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
   const { items, cartCount, cartTotal, removeItem, updateQuantity } = useCart();
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
 
   return (
     <AnimatePresence>
@@ -82,7 +96,7 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                     {/* Product Image */}
                     <div className="relative h-20 w-20 flex-shrink-0 bg-white rounded-lg overflow-hidden border border-[#E6E6E3]">
                       {item.image ? (
-                        <Image src={item.image} alt={item.name} fill className="object-cover" />
+                        <SafeImage src={item.image} alt={item.name} fill sizes="80px" className="object-cover" />
                       ) : (
                         <div className="h-full w-full flex items-center justify-center text-gray-300">
                           <ShoppingBag className="h-6 w-6" />

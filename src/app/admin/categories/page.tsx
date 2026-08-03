@@ -5,6 +5,7 @@ import { getCategories, addCategory, deleteCategory, updateCategory, FirestoreCa
 import { uploadFile } from "@/services/storageService";
 import { FiPlus, FiTrash2, FiEdit2, FiLoader, FiCheck, FiX, FiTag } from "react-icons/fi";
 import Image from "next/image";
+import { SafeImage } from "@/components/ui/SafeImage";
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<FirestoreCategory[]>([]);
@@ -123,7 +124,7 @@ export default function CategoriesPage() {
             <div key={cat.id} className="bg-[#141414] border border-white/[0.07] rounded-xl overflow-hidden">
               {cat.image && (
                 <div className="relative h-28">
-                  <Image src={cat.image} alt={cat.name} fill className="object-cover" />
+                  <SafeImage src={cat.image} alt={cat.name} fill sizes="(max-width: 640px) 100vw, 33vw" className="object-cover" />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                 </div>
               )}

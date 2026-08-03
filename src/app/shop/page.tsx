@@ -25,6 +25,17 @@ export default function ShopPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
+    if (sidebarOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [sidebarOpen]);
+
+  useEffect(() => {
     Promise.all([getActiveProducts(), getCategories()])
       .then(([prods, cats]) => {
         setProducts(prods);
@@ -34,8 +45,20 @@ export default function ShopPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  const getEffectiveCategory = (cat?: string) => {
+    if (!cat) return "Others";
+    if (["Electronics", "Beauty", "Home Decor", "Fashion"].includes(cat)) {
+      return "Others";
+    }
+    return cat;
+  };
+
   const filtered = products
-    .filter((p) => activeCategory === "All" || p.category === activeCategory)
+    .filter((p) => {
+      if (activeCategory === "All") return true;
+      const normalized = getEffectiveCategory(p.category);
+      return normalized === activeCategory || p.category === activeCategory;
+    })
     .filter((p) => !search || p.name.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
       if (sort === "price_asc") return a.price - b.price;

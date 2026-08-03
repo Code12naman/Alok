@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { AdminProtectedRoute } from "@/components/admin/AdminProtectedRoute";
@@ -128,6 +128,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileOpen]);
+
   const isLoginPage = pathname === "/admin" || pathname === "/admin/login";
   const isForbiddenPage = pathname === "/admin/forbidden";
 
@@ -144,7 +155,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <AdminProtectedRoute>
       <div className="flex min-h-screen bg-[#050505] text-white">
         {/* DESKTOP SIDEBAR */}
-        <aside className="hidden lg:flex w-56 xl:w-64 border-r border-white/[0.07] bg-[#0a0a0a] flex-col flex-shrink-0">
+        <aside className="hidden lg:flex w-56 xl:w-64 border-r border-white/[0.07] bg-[#0a0a0a] flex-col flex-shrink-0 sticky top-0 h-screen">
           <SidebarContent pathname={pathname} />
         </aside>
 
@@ -175,7 +186,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         {/* MAIN CONTENT AREA */}
         <div className="flex-1 flex flex-col min-w-0">
           {/* TOP BAR */}
-          <header className="h-14 border-b border-white/[0.07] bg-[#0a0a0a] flex items-center justify-between px-4 md:px-6 flex-shrink-0">
+          <header className="h-14 border-b border-white/[0.07] bg-[#0a0a0a] flex items-center justify-between px-4 md:px-6 flex-shrink-0 sticky top-0 z-30">
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setMobileOpen(true)}
@@ -206,7 +217,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </header>
 
           {/* PAGE CONTENT */}
-          <main className="flex-1 p-4 md:p-6 xl:p-8 overflow-y-auto">
+          <main className="flex-1 p-4 md:p-6 xl:p-8">
             {children}
           </main>
         </div>

@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import { CheckCircle2, Package, Truck, ArrowRight, ShoppingBag, MapPin, CreditCard } from "lucide-react";
 import Image from "next/image";
 import { getOrderById, OrderData } from "@/services/orderService";
+import { SafeImage } from "@/components/ui/SafeImage";
 
 function CheckoutSuccessContent() {
   const searchParams = useSearchParams();
@@ -78,7 +79,7 @@ function CheckoutSuccessContent() {
                   <div key={idx} className="flex items-center gap-3 bg-[#F7F7F5] p-3 rounded-xl border border-[#E6E6E3]">
                     <div className="relative h-14 w-14 rounded-lg overflow-hidden bg-white flex-shrink-0 border border-[#E6E6E3]">
                       {item.image ? (
-                        <Image src={item.image} alt={item.name} fill className="object-cover" />
+                        <SafeImage src={item.image} alt={item.name} fill sizes="56px" className="object-cover" />
                       ) : (
                         <ShoppingBag className="h-6 w-6 text-gray-300 m-auto" />
                       )}

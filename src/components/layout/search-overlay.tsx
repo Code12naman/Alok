@@ -5,7 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Search } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { getActiveProducts, FirestoreProduct } from "@/services/productService";
+import { getActiveProducts, FirestoreProduct, getImageUrl } from "@/services/productService";
+import { SafeImage } from "@/components/ui/SafeImage";
 
 interface SearchOverlayProps {
   isOpen: boolean;
@@ -18,6 +19,17 @@ export function SearchOverlay({ isOpen, onClose }: SearchOverlayProps) {
   const [results, setResults] = useState<FirestoreProduct[]>([]);
   const [loaded, setLoaded] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen && !loaded) {
@@ -134,34 +146,39 @@ export function SearchOverlay({ isOpen, onClose }: SearchOverlayProps) {
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">
                     {results.length} Products Found
                   </p>
-                  {results.map((product) => (
-                    <Link
-                      key={product.id}
-                      href={`/product/${product.slug}`}
-                      onClick={onClose}
-                      className="flex items-center gap-4 p-3 bg-[#F7F7F5] hover:bg-[#F2F2F0] rounded-xl border border-[#E6E6E3] transition-all group"
-                    >
-                      <div className="relative h-14 w-14 flex-shrink-0 bg-white rounded-lg overflow-hidden border border-[#E6E6E3]">
-                        {(product.thumbnail || product.images?.[0]) && (
-                          <Image
-                            src={product.thumbnail || product.images[0]}
-                            alt={product.name}
-                            fill
-                            className="object-cover"
-                          />
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-sm text-[#111111] group-hover:text-[#F4512C] transition-colors truncate">
-                          {product.name}
-                        </h4>
-                        <p className="text-xs text-gray-500 mt-0.5">{product.category}</p>
-                      </div>
-                      <span className="font-bold text-sm text-[#F4512C]">
-                        ₹{product.price.toLocaleString("en-IN")}
-                      </span>
-                    </Link>
-                  ))}
+                  {results.map((product) => {
+                    const productSlug = product.slug || product.id || "";
+                    const thumbUrl = getImageUrl(product.thumbnail) || getImageUrl(product.images?.[0]);
+                    return (
+                      <Link
+                        key={product.id}
+                        href={`/product/${productSlug}`}
+                        onClick={onClose}
+                        className="flex items-center gap-4 p-3 bg-[#F7F7F5] hover:bg-[#F2F2F0] rounded-xl border border-[#E6E6E3] transition-all group"
+                      >
+                        <div className="relative h-14 w-14 flex-shrink-0 bg-white rounded-lg overflow-hidden border border-[#E6E6E3]">
+                          {thumbUrl && (
+                            <SafeImage
+                              src={thumbUrl}
+                              alt={product.name}
+                              fill
+                              sizes="56px"
+                              className="object-cover"
+                            />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-semibold text-sm text-[#111111] group-hover:text-[#F4512C] transition-colors truncate">
+                            {product.name}
+                          </h4>
+                          <p className="text-xs text-gray-500 mt-0.5">{product.category}</p>
+                        </div>
+                        <span className="font-bold text-sm text-[#F4512C]">
+                          ₹{product.price.toLocaleString("en-IN")}
+                        </span>
+                      </Link>
+                    );
+                  })}
                 </div>
               )}
             </div>

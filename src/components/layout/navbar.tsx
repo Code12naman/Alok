@@ -20,12 +20,12 @@ const navLinks = [
     name: "Categories",
     href: "/categories",
     dropdown: [
-      { name: "Fashion", href: "/shop?category=Fashion" },
-      { name: "Electronics", href: "/shop?category=Electronics" },
-      { name: "Beauty", href: "/shop?category=Beauty" },
-      { name: "Fitness", href: "/shop?category=Fitness" },
-      { name: "Home Decor", href: "/shop?category=Home Decor" },
+      { name: "Men", href: "/shop?category=Men" },
+      { name: "Women", href: "/shop?category=Women" },
+      { name: "Kids", href: "/shop?category=Kids" },
+      { name: "Shoes", href: "/shop?category=Shoes" },
       { name: "Accessories", href: "/shop?category=Accessories" },
+      { name: "Others", href: "/shop?category=Others" },
     ],
   },
   { name: "About", href: "/about" },
@@ -83,13 +83,18 @@ export function Navbar() {
               <Menu className="h-6 w-6" />
             </button>
 
-            <Link href="/" className="flex items-center gap-2 group">
-              <span className="h-8 w-8 rounded-full bg-[#F4512C] text-white flex items-center justify-center font-bold text-sm tracking-tighter">
-                N
+            <Link href="/" className="flex items-center gap-2.5 group">
+              <span className="h-8 w-8 rounded-full bg-[#F4512C] text-white flex items-center justify-center font-extrabold text-xs tracking-tighter shadow-sm flex-shrink-0">
+                CT
               </span>
-              <span className="font-bold text-xl tracking-tight text-[#111111] group-hover:text-[#F4512C] transition-colors">
-                STREET<span className="text-[#F4512C]">MODE</span>
-              </span>
+              <div className="flex flex-col text-left">
+                <span className="font-extrabold text-sm sm:text-base md:text-lg tracking-tight text-[#111111] group-hover:text-[#F4512C] transition-colors leading-none">
+                  CLASSIC <span className="text-[#F4512C]">THREAD</span>
+                </span>
+                <span className="text-[8px] sm:text-[9px] font-bold tracking-widest text-gray-400 uppercase mt-0.5 leading-none">
+                  MJ FASHION HUB
+                </span>
+              </div>
             </Link>
           </div>
 

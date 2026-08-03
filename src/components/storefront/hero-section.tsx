@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { ArrowRight, Star } from "lucide-react";
+import { SafeImage } from "@/components/ui/SafeImage";
 
 const floatingCards = [
   {
@@ -140,7 +141,7 @@ export function HeroSection() {
                 className={`absolute ${card.position} z-20 flex items-center gap-3 bg-white/90 backdrop-blur-md p-2.5 pr-4 rounded-2xl shadow-lg border border-white/40 hover:shadow-xl transition-shadow max-w-[210px]`}
               >
                 <div className="relative h-12 w-12 rounded-xl overflow-hidden bg-[#F7F7F5] flex-shrink-0 border border-gray-100">
-                  <Image src={card.image} alt={card.name} fill className="object-cover" />
+                  <SafeImage src={card.image} alt={card.name} fill sizes="48px" className="object-cover" />
                 </div>
                 <div className="min-w-0">
                   <h4 className="text-xs font-bold text-[#111111] truncate">{card.name}</h4>

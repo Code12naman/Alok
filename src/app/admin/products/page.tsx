@@ -3,7 +3,16 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { getProducts, deleteProduct, FirestoreProduct, updateProduct } from "@/services/productService";
+import {
+  getProducts,
+  deleteProduct,
+  getProductById,
+  FirestoreProduct,
+  getImageUrl,
+  getImagePublicId,
+} from "@/services/productService";
+import { deleteCloudinaryAsset } from "@/services/cloudinaryService";
+import { auth } from "@/firebase/config";
 import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiLoader, FiPackage, FiEye } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -37,12 +46,19 @@ export default function AdminProductsPage() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   useEffect(() => {
     let res = [...products];
-    if (search) res = res.filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.sku?.toLowerCase().includes(search.toLowerCase()));
-    if (statusFilter !== "all") res = res.filter(p => p.status === statusFilter);
+    if (search)
+      res = res.filter(
+        (p) =>
+          p.name.toLowerCase().includes(search.toLowerCase()) ||
+          p.sku?.toLowerCase().includes(search.toLowerCase())
+      );
+    if (statusFilter !== "all") res = res.filter((p) => p.status === statusFilter);
     setFiltered(res);
   }, [search, statusFilter, products]);
 
@@ -50,9 +66,32 @@ export default function AdminProductsPage() {
     if (!deleteId) return;
     setDeleting(true);
     try {
+      // 1. Fetch product to locate Cloudinary publicIds
+      const product = await getProductById(deleteId);
+      if (product && product.images) {
+        const publicIds = product.images
+          .map((img) => getImagePublicId(img))
+          .filter(Boolean) as string[];
+
+        if (publicIds.length > 0) {
+          const user = auth.currentUser;
+          const idToken = user ? await user.getIdToken().catch(() => "") : "";
+          if (idToken) {
+            console.log(
+              `[AdminProducts] Deleting ${publicIds.length} Cloudinary assets for product "${deleteId}"...`
+            );
+            await Promise.allSettled(
+              publicIds.map((pid) => deleteCloudinaryAsset(pid, idToken))
+            );
+          }
+        }
+      }
+
+      // 2. Delete Firestore product document
       await deleteProduct(deleteId);
       setProducts((prev) => prev.filter((p) => p.id !== deleteId));
-    } catch {
+    } catch (err) {
+      console.error("Failed to delete product:", err);
       alert("Failed to delete product.");
     } finally {
       setDeleting(false);
@@ -148,8 +187,8 @@ export default function AdminProductsPage() {
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-md overflow-hidden bg-white/5 flex-shrink-0">
-                            {p.thumbnail || p.images?.[0] ? (
-                              <Image src={p.thumbnail || p.images[0]} alt={p.name} width={40} height={40} className="object-cover w-full h-full" />
+                            {getImageUrl(p.thumbnail) || getImageUrl(p.images?.[0]) ? (
+                              <Image src={getImageUrl(p.thumbnail) || getImageUrl(p.images?.[0])} alt={p.name} width={40} height={40} className="object-cover w-full h-full" />
                             ) : (
                               <div className="w-full h-full flex items-center justify-center text-white/20">
                                 <FiPackage className="w-4 h-4" />

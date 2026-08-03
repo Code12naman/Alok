@@ -4,7 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { Star, ShoppingBag } from "lucide-react";
 import { useCart } from "@/context/CartContext";
-import { FirestoreProduct } from "@/services/productService";
+import { FirestoreProduct, getImageUrl } from "@/services/productService";
+import { SafeImage } from "@/components/ui/SafeImage";
 
 interface BestsellerCardProps {
   product: FirestoreProduct;
@@ -12,7 +13,8 @@ interface BestsellerCardProps {
 
 export function BestsellerCard({ product }: BestsellerCardProps) {
   const { addItem } = useCart();
-  const imageUrl = product.thumbnail || product.images?.[0] || "";
+  const imageUrl = getImageUrl(product.thumbnail) || getImageUrl(product.images?.[0]) || "";
+  const productSlug = product.slug || product.id || "";
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -21,7 +23,7 @@ export function BestsellerCard({ product }: BestsellerCardProps) {
       name: product.name,
       price: product.price,
       image: imageUrl,
-      slug: product.slug,
+      slug: productSlug,
       quantity: 1,
     });
   };
@@ -30,11 +32,11 @@ export function BestsellerCard({ product }: BestsellerCardProps) {
     <div className="flex bg-white rounded-2xl overflow-hidden border border-[#E6E6E3] hover:shadow-md transition-all duration-300 p-3 gap-4 items-center">
       {/* Left: Product Image */}
       <Link
-        href={`/product/${product.slug}`}
+        href={`/product/${productSlug}`}
         className="relative h-32 w-32 flex-shrink-0 bg-[#F5F5F3] rounded-xl overflow-hidden block"
       >
         {imageUrl ? (
-          <Image src={imageUrl} alt={product.name} fill className="object-cover" />
+          <SafeImage src={imageUrl} alt={product.name} fill sizes="128px" className="object-cover" />
         ) : (
           <div className="h-full w-full flex items-center justify-center text-gray-300">
             <ShoppingBag className="h-8 w-8" />
@@ -50,7 +52,7 @@ export function BestsellerCard({ product }: BestsellerCardProps) {
             Bestseller
           </span>
 
-          <Link href={`/product/${product.slug}`}>
+          <Link href={`/product/${productSlug}`}>
             <h3 className="font-bold text-xs md:text-sm text-[#111111] line-clamp-1 hover:text-[#F4512C] transition-colors">
               {product.name}
             </h3>

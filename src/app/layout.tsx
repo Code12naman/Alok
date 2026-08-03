@@ -13,9 +13,9 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "STREET MODE | Premium Fashion & Lifestyle E-Commerce",
-  description: "Discover curated premium streetwear, electronics, fashion, and lifestyle essentials.",
-  keywords: ["fashion", "streetwear", "lifestyle", "trending products", "online shop"],
+  title: "CLASSIC THREAD — MJ FASHION HUB",
+  description: "Discover curated apparel, shoes, accessories, and lifestyle fashion at Classic Thread MJ Fashion Hub.",
+  keywords: ["fashion", "classic thread", "mj fashion hub", "clothing", "shoes", "accessories", "online shop"],
 };
 
 export default function RootLayout({

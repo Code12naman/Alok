@@ -1,5 +1,7 @@
 "use client";
 
+import { SafeImage } from "@/components/ui/SafeImage";
+
 import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
@@ -7,34 +9,34 @@ import { FirestoreCategory } from "@/services/categoryService";
 
 const defaultCategories = [
   {
-    name: "Fashion",
+    name: "Men",
+    image: "https://images.unsplash.com/photo-1490578474895-699cd4e2cf59?auto=format&fit=crop&q=80&w=800",
+    href: "/shop?category=Men",
+  },
+  {
+    name: "Women",
     image: "https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&q=80&w=800",
-    href: "/shop?category=Fashion",
+    href: "/shop?category=Women",
   },
   {
-    name: "Electronics",
-    image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=800",
-    href: "/shop?category=Electronics",
+    name: "Kids",
+    image: "https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?auto=format&fit=crop&q=80&w=800",
+    href: "/shop?category=Kids",
   },
   {
-    name: "Beauty",
-    image: "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&q=80&w=800",
-    href: "/shop?category=Beauty",
-  },
-  {
-    name: "Fitness",
-    image: "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&q=80&w=800",
-    href: "/shop?category=Fitness",
-  },
-  {
-    name: "Home Decor",
-    image: "https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&q=80&w=800",
-    href: "/shop?category=Home Decor",
+    name: "Shoes",
+    image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&q=80&w=800",
+    href: "/shop?category=Shoes",
   },
   {
     name: "Accessories",
     image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=800",
     href: "/shop?category=Accessories",
+  },
+  {
+    name: "Others",
+    image: "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?auto=format&fit=crop&q=80&w=800",
+    href: "/shop?category=Others",
   },
 ];
 
@@ -80,10 +82,11 @@ export function CategoryGrid({ categories = [] }: CategoryGridProps) {
             >
               {/* Image container */}
               <div className="relative aspect-[4/5] overflow-hidden bg-gray-100">
-                <Image
+                <SafeImage
                   src={cat.image}
                   alt={cat.name}
                   fill
+                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 16vw"
                   className="object-cover transition-transform duration-500 group-hover:scale-105"
                 />
               </div>

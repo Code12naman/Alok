@@ -1,5 +1,7 @@
 "use client";
 
+import { SafeImage } from "@/components/ui/SafeImage";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -68,23 +70,27 @@ export default function CheckoutPage() {
 
   // Load addresses when user is authenticated
   useEffect(() => {
-    if (user) {
-      getCustomerAddresses(user.uid).then((list) => {
-        setAddresses(list);
-        const def = list.find((a) => a.isDefault) || list[0];
-        if (def && def.id) {
-          setSelectedAddressId(def.id);
-        }
-        if (list.length === 0) {
-          setShowAddressForm(true);
-        }
-      });
-      // Set default name/phone into form
+    if (user && user.uid) {
+      getCustomerAddresses(user.uid)
+        .then((list) => {
+          setAddresses(list);
+          const def = list.find((a) => a.isDefault) || list[0];
+          if (def && def.id) {
+            setSelectedAddressId(def.id);
+          }
+          if (list.length === 0) {
+            setShowAddressForm(true);
+          }
+        })
+        .catch((err: any) => {
+          console.error("Error loading addresses on checkout:", err?.code, err?.message, err);
+        });
+
       if (profile) {
         setAddrForm((prev) => ({
           ...prev,
-          fullName: profile.name || "",
-          phone: profile.phone || "",
+          fullName: prev.fullName || profile.name || "",
+          phone: prev.phone || profile.phone || "",
         }));
       }
     }
@@ -95,7 +101,7 @@ export default function CheckoutPage() {
     if (user && step === 1) {
       setStep(2);
     }
-  }, [user]);
+  }, [user, step]);
 
   const deliveryFee = cartTotal >= 999 || items.length === 0 ? 0 : 99;
   const finalTotal = cartTotal + deliveryFee;
@@ -105,18 +111,35 @@ export default function CheckoutPage() {
   // Handle Save New Address
   const handleSaveAddress = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+
+    if (!user || !user.uid) {
+      setErrorMsg("Authentication required: Please sign in before saving an address.");
+      return;
+    }
+
+    if (!addrForm.fullName.trim()) { setErrorMsg("Full Name is required."); return; }
+    if (!addrForm.phone.trim()) { setErrorMsg("Phone number is required."); return; }
+    if (!addrForm.building.trim()) { setErrorMsg("Address Line 1 / Building is required."); return; }
+    if (!addrForm.city.trim()) { setErrorMsg("City is required."); return; }
+    if (!addrForm.state.trim()) { setErrorMsg("State is required."); return; }
+    if (!addrForm.pinCode.trim()) { setErrorMsg("PIN Code is required."); return; }
+
     try {
       setIsProcessing(true);
       setErrorMsg("");
+
       const newId = await addCustomerAddress(user.uid, {
         fullName: addrForm.fullName.trim(),
         phone: addrForm.phone.trim(),
         building: addrForm.building.trim(),
         street: addrForm.street.trim(),
+        addressLine1: addrForm.building.trim(),
+        addressLine2: addrForm.street.trim(),
         city: addrForm.city.trim(),
         state: addrForm.state.trim(),
         pinCode: addrForm.pinCode.trim(),
+        postalCode: addrForm.pinCode.trim(),
+        country: "India",
         landmark: addrForm.landmark.trim(),
         isDefault: addrForm.isDefault,
       });
@@ -126,7 +149,14 @@ export default function CheckoutPage() {
       setSelectedAddressId(newId);
       setShowAddressForm(false);
     } catch (err: any) {
-      setErrorMsg("Failed to save address. Please check input fields.");
+      console.error("Failed to save address:", err?.code, err?.message, err);
+      if (err?.code === "permission-denied") {
+        setErrorMsg("Permission denied: Unable to write to database. Please check your login session.");
+      } else if (err?.code === "unauthenticated") {
+        setErrorMsg("Please sign in before saving an address.");
+      } else {
+        setErrorMsg(err?.message || "Failed to save address. Please try again.");
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -708,7 +738,7 @@ export default function CheckoutPage() {
                   <div key={i} className="flex gap-3 text-xs">
                     <div className="h-12 w-12 bg-[#F7F7F5] rounded-lg relative overflow-hidden flex-shrink-0 border border-[#E6E6E3]">
                       {item.image ? (
-                        <Image src={item.image} alt={item.name} fill className="object-cover" />
+                        <SafeImage src={item.image} alt={item.name} fill sizes="48px" className="object-cover" />
                       ) : (
                         <ShoppingBag className="h-5 w-5 text-gray-300 m-auto" />
                       )}

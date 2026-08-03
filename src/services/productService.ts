@@ -16,6 +16,24 @@ import { db } from "../firebase/config";
 
 const COL = "products";
 
+export interface CloudinaryImage {
+  url: string;
+  publicId?: string;
+}
+
+export type ProductImageItem = string | CloudinaryImage;
+
+export function getImageUrl(img: ProductImageItem | undefined | null): string {
+  if (!img) return "";
+  if (typeof img === "string") return img;
+  return img.url || "";
+}
+
+export function getImagePublicId(img: ProductImageItem | undefined | null): string | null {
+  if (!img || typeof img === "string") return null;
+  return img.publicId || null;
+}
+
 export interface FirestoreProduct {
   id?: string;
   name: string;
@@ -35,7 +53,7 @@ export interface FirestoreProduct {
   material?: string;
   fit?: string;
   careInstructions?: string;
-  images: string[];
+  images: ProductImageItem[];
   thumbnail?: string;
   video?: string;
   tags?: string[];
@@ -49,8 +67,16 @@ export interface FirestoreProduct {
   updatedAt?: any;
 }
 
-function toSlug(name: string) {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+export function toSlug(name: string): string {
+  const cleaned = (name || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  if (!cleaned || cleaned === "product" || cleaned === "product-") {
+    return `product-${Date.now()}`;
+  }
+  return cleaned;
 }
 
 /**
@@ -96,7 +122,7 @@ export function sanitizeForFirestore<T>(data: T): T {
  */
 export function normalizeProductData(raw: Partial<FirestoreProduct>): Omit<FirestoreProduct, "id"> {
   const name = (raw.name || "").trim();
-  const slug = (raw.slug || "").trim() || toSlug(name);
+  const slug = (raw.slug || "").trim() ? toSlug(raw.slug!) : toSlug(name);
   const sku = (raw.sku || "").trim();
   const shortDescription = (raw.shortDescription || "").trim();
   const description = (raw.description || "").trim();
@@ -131,7 +157,7 @@ export function normalizeProductData(raw: Partial<FirestoreProduct>): Omit<Fires
   const fit = (raw.fit || "").trim();
   const careInstructions = (raw.careInstructions || "").trim();
   const images = Array.isArray(raw.images) ? raw.images.filter(Boolean) : [];
-  const thumbnail = raw.thumbnail || images[0] || "";
+  const thumbnail = raw.thumbnail || getImageUrl(images[0]) || "";
   const video = (raw.video || "").trim();
   const tags = Array.isArray(raw.tags) ? raw.tags.filter(Boolean) : [];
   const status = raw.status || "draft";
@@ -203,16 +229,28 @@ export const getActiveProducts = async (): Promise<FirestoreProduct[]> => {
 };
 
 export const getProductById = async (id: string): Promise<FirestoreProduct | null> => {
-  const snap = await getDoc(doc(db, COL, id));
-  if (!snap.exists()) return null;
-  return { id: snap.id, ...snap.data() } as FirestoreProduct;
+  if (!id) return null;
+  try {
+    const snap = await getDoc(doc(db, COL, id));
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() } as FirestoreProduct;
+  } catch {
+    return null;
+  }
 };
 
 export const getProductBySlug = async (slug: string): Promise<FirestoreProduct | null> => {
-  const snap = await getDocs(query(collection(db, COL), where("slug", "==", slug)));
-  if (snap.empty) return null;
-  const d = snap.docs[0];
-  return { id: d.id, ...d.data() } as FirestoreProduct;
+  if (!slug) return null;
+  try {
+    const snap = await getDocs(query(collection(db, COL), where("slug", "==", slug)));
+    if (!snap.empty) {
+      const d = snap.docs[0];
+      return { id: d.id, ...d.data() } as FirestoreProduct;
+    }
+  } catch (err) {
+    console.warn("getProductBySlug query failed, falling back to ID:", err);
+  }
+  return await getProductById(slug);
 };
 
 export const getProductsByCategory = async (category: string): Promise<FirestoreProduct[]> => {

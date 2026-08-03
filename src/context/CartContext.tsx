@@ -6,6 +6,7 @@ import React, {
   useReducer,
   useEffect,
   useState,
+  useRef,
   ReactNode,
 } from "react";
 import { useAuth } from "./AuthContext";
@@ -50,8 +51,34 @@ interface CartContextType {
 
 const STORAGE_KEY = "street-mode-cart-v1";
 
-function itemKey(item: Pick<CartItem, "productId" | "size" | "color">) {
+export function itemKey(item: Pick<CartItem, "productId" | "size" | "color">) {
   return `${item.productId}__${item.size ?? ""}__${item.color ?? ""}`;
+}
+
+export function mergeCartItems(localItems: CartItem[], remoteItems: CartItem[]): CartItem[] {
+  const mergedMap = new Map<string, CartItem>();
+
+  for (const item of remoteItems) {
+    if (item && item.productId) {
+      mergedMap.set(itemKey(item), { ...item });
+    }
+  }
+
+  for (const item of localItems) {
+    if (!item || !item.productId) continue;
+    const key = itemKey(item);
+    const existing = mergedMap.get(key);
+    if (existing) {
+      mergedMap.set(key, {
+        ...existing,
+        quantity: existing.quantity + item.quantity,
+      });
+    } else {
+      mergedMap.set(key, { ...item });
+    }
+  }
+
+  return Array.from(mergedMap.values());
 }
 
 function cartReducer(state: CartState, action: CartAction): CartState {
@@ -107,6 +134,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const { user } = useAuth();
 
+  const isHydratedRef = useRef(false);
+  const prevUidRef = useRef<string | null>(null);
+
   const showToast = (msg: string = "Added to cart ✓") => {
     setToastMessage(msg);
     setTimeout(() => {
@@ -114,7 +144,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }, 3000);
   };
 
-  // Local Storage Hydration on mount
+  // 1. Initial Local Storage Hydration on mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -127,55 +157,83 @@ export function CartProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore
     }
+    if (!user) {
+      isHydratedRef.current = true;
+    }
   }, []);
 
-  // Firestore Sync & Merge on user login
+  // 2. Hydration & Safe Merge when User changes / logs in
   useEffect(() => {
-    if (!user) return;
-    const syncFirestoreCart = async () => {
+    const currentUid = user?.uid || null;
+
+    if (!currentUid) {
+      prevUidRef.current = null;
+      isHydratedRef.current = true;
+      return;
+    }
+
+    if (prevUidRef.current === currentUid) {
+      return;
+    }
+
+    prevUidRef.current = currentUid;
+    isHydratedRef.current = false;
+
+    const syncWithFirestore = async () => {
       try {
-        const cartRef = doc(db, "users", user.uid, "cart", "default");
+        const cartRef = doc(db, "users", currentUid, "cart", "default");
         const snap = await getDoc(cartRef);
+
+        let finalItems: CartItem[] = [];
         if (snap.exists()) {
           const remoteItems = (snap.data().items as CartItem[]) || [];
-          if (remoteItems.length > 0 && state.items.length === 0) {
-            dispatch({ type: "HYDRATE", payload: remoteItems });
-          } else if (state.items.length > 0) {
-            // Push local items to firestore
-            await setDoc(cartRef, { items: state.items, updatedAt: new Date() });
-          }
-        } else if (state.items.length > 0) {
-          await setDoc(cartRef, { items: state.items, updatedAt: new Date() });
+          finalItems = mergeCartItems(state.items, remoteItems);
+        } else {
+          finalItems = state.items;
         }
-      } catch (e) {
-        console.error("Error syncing cart with Firestore:", e);
+
+        dispatch({ type: "HYDRATE", payload: finalItems });
+
+        // Save merged result back to Firestore
+        if (finalItems.length > 0) {
+          await setDoc(cartRef, { items: finalItems, updatedAt: new Date() });
+        }
+      } catch (e: any) {
+        console.warn("CartContext: Firestore sync notice (guest/offline mode active):", e?.message || e);
+      } finally {
+        isHydratedRef.current = true;
       }
     };
-    syncFirestoreCart();
+
+    syncWithFirestore();
   }, [user]);
 
-  // Persist on change (localStorage & Firestore if logged in)
+  // 3. Persist cart updates (Local Storage & Firestore for authenticated user)
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state.items));
     } catch {
       // ignore
     }
-    if (user) {
-      const saveToDb = async () => {
-        try {
-          const cartRef = doc(db, "users", user.uid, "cart", "default");
-          await setDoc(cartRef, { items: state.items, updatedAt: new Date() });
-        } catch (e) {
-          console.error("Failed saving cart to Firestore:", e);
-        }
-      };
-      saveToDb();
+
+    if (!user || !user.uid || !isHydratedRef.current) {
+      return;
     }
+
+    const saveToDb = async () => {
+      try {
+        const cartRef = doc(db, "users", user.uid, "cart", "default");
+        await setDoc(cartRef, { items: state.items, updatedAt: new Date() });
+      } catch (e: any) {
+        console.warn("CartContext: Failed saving cart to Firestore (offline/permission):", e?.message || e);
+      }
+    };
+
+    saveToDb();
   }, [state.items, user]);
 
-  const cartCount = state.items.reduce((sum, i) => sum + i.quantity, 0);
-  const cartTotal = state.items.reduce((sum, i) => sum + i.price * i.quantity, 0);
+  const cartCount = state.items.reduce((sum, i) => sum + (i.quantity || 0), 0);
+  const cartTotal = state.items.reduce((sum, i) => sum + (i.price || 0) * (i.quantity || 0), 0);
 
   const addItem = (item: Omit<CartItem, "quantity"> & { quantity?: number }) => {
     dispatch({ type: "ADD_ITEM", payload: { ...item, quantity: item.quantity ?? 1 } });
@@ -227,4 +285,3 @@ export function CartProvider({ children }: { children: ReactNode }) {
 }
 
 export const useCart = () => useContext(CartContext);
-

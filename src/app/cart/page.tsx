@@ -6,6 +6,8 @@ import { motion } from "framer-motion";
 import { ShoppingBag, ArrowRight, Minus, Plus, Trash2, ArrowLeft } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 
+import { SafeImage } from "@/components/ui/SafeImage";
+
 export default function CartPage() {
   const { items, cartCount, cartTotal, updateQuantity, removeItem } = useCart();
 
@@ -59,90 +61,93 @@ export default function CartPage() {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             {/* Cart Items List (8 cols) */}
             <div className="lg:col-span-8 space-y-4">
-              {items.map((item, idx) => (
-                <motion.div
-                  key={`${item.productId}-${item.size}-${item.color}-${idx}`}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.05 }}
-                  className="bg-white border border-[#E6E6E3] rounded-2xl p-4 md:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4 shadow-xs"
-                >
-                  {/* Thumbnail */}
-                  <div className="relative h-24 w-24 flex-shrink-0 bg-[#F7F7F5] rounded-xl overflow-hidden border border-[#E6E6E3]">
-                    {item.image ? (
-                      <Image src={item.image} alt={item.name} fill className="object-cover" />
-                    ) : (
-                      <div className="h-full w-full flex items-center justify-center text-gray-300">
-                        <ShoppingBag className="h-8 w-8" />
+              {items.map((item, idx) => {
+                const productSlug = item.slug || item.productId || "";
+                return (
+                  <motion.div
+                    key={`${item.productId}-${item.size}-${item.color}-${idx}`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className="bg-white border border-[#E6E6E3] rounded-2xl p-4 md:p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4 shadow-xs"
+                  >
+                    {/* Thumbnail */}
+                    <div className="relative h-24 w-24 flex-shrink-0 bg-[#F7F7F5] rounded-xl overflow-hidden border border-[#E6E6E3]">
+                      {item.image ? (
+                        <SafeImage src={item.image} alt={item.name} fill sizes="96px" className="object-cover" />
+                      ) : (
+                        <div className="h-full w-full flex items-center justify-center text-gray-300">
+                          <ShoppingBag className="h-8 w-8" />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <Link
+                        href={`/product/${productSlug}`}
+                        className="font-bold text-sm text-[#111111] hover:text-[#F4512C] transition-colors truncate block"
+                      >
+                        {item.name}
+                      </Link>
+
+                      <div className="flex flex-wrap gap-2 text-[11px] text-gray-500 font-medium mt-1">
+                        {item.size && (
+                          <span className="bg-[#F7F7F5] border border-[#E6E6E3] px-2 py-0.5 rounded-md">
+                            Size: <strong className="text-black">{item.size}</strong>
+                          </span>
+                        )}
+                        {item.color && (
+                          <span className="bg-[#F7F7F5] border border-[#E6E6E3] px-2 py-0.5 rounded-md">
+                            Color: <strong className="text-black">{item.color}</strong>
+                          </span>
+                        )}
                       </div>
-                    )}
-                  </div>
 
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <Link
-                      href={`/product/${item.slug}`}
-                      className="font-bold text-sm text-[#111111] hover:text-[#F4512C] transition-colors truncate block"
-                    >
-                      {item.name}
-                    </Link>
+                      <p className="font-extrabold text-sm text-[#F4512C] mt-2">
+                        ₹{item.price.toLocaleString("en-IN")}
+                      </p>
+                    </div>
 
-                    <div className="flex flex-wrap gap-2 text-[11px] text-gray-500 font-medium mt-1">
-                      {item.size && (
-                        <span className="bg-[#F7F7F5] border border-[#E6E6E3] px-2 py-0.5 rounded-md">
-                          Size: <strong className="text-black">{item.size}</strong>
+                    {/* Quantity Controls & Actions */}
+                    <div className="flex items-center justify-between sm:justify-end gap-6 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-0 border-[#E6E6E3]">
+                      <div className="flex items-center border border-[#E6E6E3] bg-[#F7F7F5] rounded-xl h-9">
+                        <button
+                          onClick={() =>
+                            updateQuantity(item.productId, item.quantity - 1, item.size, item.color)
+                          }
+                          className="px-3 h-full text-gray-600 hover:text-black transition-colors cursor-pointer"
+                          aria-label="Decrease quantity"
+                        >
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                        <span className="w-8 text-center text-xs font-bold">{item.quantity}</span>
+                        <button
+                          onClick={() =>
+                            updateQuantity(item.productId, item.quantity + 1, item.size, item.color)
+                          }
+                          className="px-3 h-full text-gray-600 hover:text-black transition-colors cursor-pointer"
+                          aria-label="Increase quantity"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="font-extrabold text-sm text-[#111111] block">
+                          ₹{(item.price * item.quantity).toLocaleString("en-IN")}
                         </span>
-                      )}
-                      {item.color && (
-                        <span className="bg-[#F7F7F5] border border-[#E6E6E3] px-2 py-0.5 rounded-md">
-                          Color: <strong className="text-black">{item.color}</strong>
-                        </span>
-                      )}
+                        <button
+                          onClick={() => removeItem(item.productId, item.size, item.color)}
+                          className="text-xs text-gray-400 hover:text-red-500 transition-colors inline-flex items-center gap-1 mt-1 cursor-pointer"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Remove
+                        </button>
+                      </div>
                     </div>
-
-                    <p className="font-extrabold text-sm text-[#F4512C] mt-2">
-                      ₹{item.price.toLocaleString("en-IN")}
-                    </p>
-                  </div>
-
-                  {/* Quantity Controls & Actions */}
-                  <div className="flex items-center justify-between sm:justify-end gap-6 w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-0 border-[#E6E6E3]">
-                    <div className="flex items-center border border-[#E6E6E3] bg-[#F7F7F5] rounded-xl h-9">
-                      <button
-                        onClick={() =>
-                          updateQuantity(item.productId, item.quantity - 1, item.size, item.color)
-                        }
-                        className="px-3 h-full text-gray-600 hover:text-black transition-colors cursor-pointer"
-                        aria-label="Decrease quantity"
-                      >
-                        <Minus className="h-3.5 w-3.5" />
-                      </button>
-                      <span className="w-8 text-center text-xs font-bold">{item.quantity}</span>
-                      <button
-                        onClick={() =>
-                          updateQuantity(item.productId, item.quantity + 1, item.size, item.color)
-                        }
-                        className="px-3 h-full text-gray-600 hover:text-black transition-colors cursor-pointer"
-                        aria-label="Increase quantity"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-
-                    <div className="text-right">
-                      <span className="font-extrabold text-sm text-[#111111] block">
-                        ₹{(item.price * item.quantity).toLocaleString("en-IN")}
-                      </span>
-                      <button
-                        onClick={() => removeItem(item.productId, item.size, item.color)}
-                        className="text-xs text-gray-400 hover:text-red-500 transition-colors inline-flex items-center gap-1 mt-1 cursor-pointer"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" /> Remove
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
+                  </motion.div>
+                );
+              })}
 
               <div className="pt-2">
                 <Link

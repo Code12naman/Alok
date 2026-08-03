@@ -18,11 +18,10 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
-    // Products: Anyone can read, only admin can create/delete; authenticated user can update stock on purchase
+    // Products: Anyone can read active/published products, only admin can create/update/delete
     match /products/{productId} {
       allow read: if true;
-      allow create, delete: if isAdmin();
-      allow update: if isAdmin() || isAuthenticated();
+      allow create, update, delete: if isAdmin();
     }
 
     // Categories: Anyone can read, only admin can create/update/delete
@@ -62,10 +61,10 @@ service cloud.firestore {
     }
 
     // Orders:
-    // - User can read/create their own orders
+    // - User can read their own orders or create their own order
     // - Admin can read/write all orders
     match /orders/{orderId} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
       allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAdmin();
     }
@@ -77,3 +76,4 @@ service cloud.firestore {
     }
   }
 }
+

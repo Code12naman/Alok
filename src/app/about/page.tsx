@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, Sparkles, ShieldCheck, Heart } from "lucide-react";
+import { SafeImage } from "@/components/ui/SafeImage";
 
 export default function AboutPage() {
   return (
@@ -35,10 +36,11 @@ export default function AboutPage() {
             </div>
 
             <div className="lg:col-span-6 relative aspect-[4/3] rounded-2xl overflow-hidden border border-[#E6E6E3] bg-[#F7F7F5]">
-              <Image
+              <SafeImage
                 src="https://images.unsplash.com/photo-1541701494587-cb58502866ab?auto=format&fit=crop&q=80&w=1200"
                 alt="About us"
                 fill
+                sizes="(max-width: 1024px) 100vw, 50vw"
                 className="object-cover"
               />
             </div>

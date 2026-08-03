@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Heart, ShoppingBag, Trash2, ArrowRight } from "lucide-react";
 import { useWishlist } from "@/context/WishlistContext";
 import { useCart } from "@/context/CartContext";
+import { SafeImage } from "@/components/ui/SafeImage";
 
 export default function WishlistPage() {
   const { items, toggleWishlist } = useWishlist();
@@ -45,73 +46,82 @@ export default function WishlistPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {items.map((product) => (
-              <div
-                key={product.productId}
-                className="bg-white rounded-2xl overflow-hidden border border-[#E6E6E3] shadow-xs flex flex-col justify-between"
-              >
-                <div>
-                  <Link href={`/product/${product.slug}`} className="relative aspect-[4/5] bg-[#F5F5F3] block overflow-hidden">
-                    {product.image ? (
-                      <Image src={product.image} alt={product.name} fill className="object-cover" />
-                    ) : (
-                      <div className="h-full w-full flex items-center justify-center text-gray-300">
-                        <ShoppingBag className="h-10 w-10" />
-                      </div>
-                    )}
-                  </Link>
-
-                  <div className="p-4">
-                    {product.category && (
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
-                        {product.category}
-                      </span>
-                    )}
-                    <Link href={`/product/${product.slug}`}>
-                      <h3 className="font-bold text-sm text-[#111111] hover:text-[#F4512C] transition-colors line-clamp-1">
-                        {product.name}
-                      </h3>
+            {items.map((product) => {
+              const productSlug = product.slug || product.productId || "";
+              return (
+                <div
+                  key={product.productId}
+                  className="bg-white rounded-2xl overflow-hidden border border-[#E6E6E3] shadow-xs flex flex-col justify-between"
+                >
+                  <div>
+                    <Link href={`/product/${productSlug}`} className="relative aspect-[4/5] bg-[#F5F5F3] block overflow-hidden">
+                      {product.image ? (
+                        <SafeImage
+                          src={product.image}
+                          alt={product.name}
+                          fill
+                          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                          className="object-cover"
+                        />
+                      ) : (
+                        <div className="h-full w-full flex items-center justify-center text-gray-300">
+                          <ShoppingBag className="h-10 w-10" />
+                        </div>
+                      )}
                     </Link>
-                    <div className="flex items-baseline gap-2 mt-2">
-                      <span className="font-extrabold text-sm text-[#111111]">
-                        ₹{product.price.toLocaleString("en-IN")}
-                      </span>
-                      {product.compareAtPrice && product.compareAtPrice > product.price && (
-                        <span className="text-xs text-gray-400 line-through">
-                          ₹{product.compareAtPrice.toLocaleString("en-IN")}
+
+                    <div className="p-4">
+                      {product.category && (
+                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
+                          {product.category}
                         </span>
                       )}
+                      <Link href={`/product/${productSlug}`}>
+                        <h3 className="font-bold text-sm text-[#111111] hover:text-[#F4512C] transition-colors line-clamp-1">
+                          {product.name}
+                        </h3>
+                      </Link>
+                      <div className="flex items-baseline gap-2 mt-2">
+                        <span className="font-extrabold text-sm text-[#111111]">
+                          ₹{product.price.toLocaleString("en-IN")}
+                        </span>
+                        {product.compareAtPrice && product.compareAtPrice > product.price && (
+                          <span className="text-xs text-gray-400 line-through">
+                            ₹{product.compareAtPrice.toLocaleString("en-IN")}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="p-4 pt-0 flex items-center gap-2">
-                  <button
-                    onClick={() =>
-                      addItem({
-                        productId: product.productId,
-                        name: product.name,
-                        price: product.price,
-                        image: product.image,
-                        slug: product.slug,
-                        quantity: 1,
-                      })
-                    }
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 bg-[#F4512C] hover:bg-[#DD3F1E] text-white text-xs font-bold py-2.5 rounded-xl transition-colors shadow-2xs"
-                  >
-                    <ShoppingBag className="h-3.5 w-3.5" /> Add to Cart
-                  </button>
+                  <div className="p-4 pt-0 flex items-center gap-2">
+                    <button
+                      onClick={() =>
+                        addItem({
+                          productId: product.productId,
+                          name: product.name,
+                          price: product.price,
+                          image: product.image,
+                          slug: product.slug,
+                          quantity: 1,
+                        })
+                      }
+                      className="flex-1 inline-flex items-center justify-center gap-1.5 bg-[#F4512C] hover:bg-[#DD3F1E] text-white text-xs font-bold py-2.5 rounded-xl transition-colors shadow-2xs"
+                    >
+                      <ShoppingBag className="h-3.5 w-3.5" /> Add to Cart
+                    </button>
 
-                  <button
-                    onClick={() => toggleWishlist(product)}
-                    aria-label="Remove from wishlist"
-                    className="p-2.5 border border-[#E6E6E3] rounded-xl text-gray-400 hover:text-red-500 hover:bg-gray-50 transition-colors"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                    <button
+                      onClick={() => toggleWishlist(product)}
+                      aria-label="Remove from wishlist"
+                      className="p-2.5 border border-[#E6E6E3] rounded-xl text-gray-400 hover:text-red-500 hover:bg-gray-50 transition-colors"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

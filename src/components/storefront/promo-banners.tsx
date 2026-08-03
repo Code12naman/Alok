@@ -1,5 +1,7 @@
 "use client";
 
+import { SafeImage } from "@/components/ui/SafeImage";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
@@ -38,10 +40,11 @@ export function PromoBanners() {
           <div className="relative bg-gradient-to-r from-[#F4512C] to-[#E03A16] rounded-3xl overflow-hidden p-6 sm:p-8 text-white min-h-[260px] flex flex-col justify-between shadow-sm">
             {/* Overlay product image */}
             <div className="absolute right-0 bottom-0 top-0 w-1/2 overflow-hidden pointer-events-none opacity-90">
-              <Image
+              <SafeImage
                 src="https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&q=80&w=800"
                 alt="Flash Sale Shoe"
                 fill
+                sizes="(max-width: 1024px) 50vw, 25vw"
                 className="object-cover object-center"
               />
             </div>
@@ -84,10 +87,11 @@ export function PromoBanners() {
           <div className="relative bg-[#111111] rounded-3xl overflow-hidden p-6 sm:p-8 text-white min-h-[260px] flex flex-col justify-between shadow-sm">
             {/* Overlay model image */}
             <div className="absolute right-0 bottom-0 top-0 w-1/2 overflow-hidden pointer-events-none opacity-80">
-              <Image
+              <SafeImage
                 src="https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&q=80&w=800"
                 alt="Summer Collection"
                 fill
+                sizes="(max-width: 1024px) 50vw, 25vw"
                 className="object-cover object-top"
               />
             </div>

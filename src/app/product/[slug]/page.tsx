@@ -6,18 +6,19 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Star, Truck, Shield, RefreshCw, Minus, Plus, Heart, Check, ShoppingBag, ArrowRight } from "lucide-react";
-import { getProductBySlug, FirestoreProduct } from "@/services/productService";
+import { getProductBySlug, FirestoreProduct, getImageUrl } from "@/services/productService";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { FiLoader, FiPackage } from "react-icons/fi";
+import { SafeImage } from "@/components/ui/SafeImage";
 
 export default function ProductPage() {
   const { slug } = useParams<{ slug: string }>();
   const [product, setProduct] = useState<FirestoreProduct | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState(0);
-  const [selectedSize, setSelectedSize] = useState("");
-  const [selectedColor, setSelectedColor] = useState("");
+  const [selectedSize, setSelectedSize] = useState<string>("");
+  const [selectedColor, setSelectedColor] = useState<string>("");
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
 
@@ -25,9 +26,15 @@ export default function ProductPage() {
   const { toggleWishlist, isInWishlist } = useWishlist();
 
   useEffect(() => {
+    if (!slug) return;
+    setLoading(true);
     getProductBySlug(slug)
-      .then(setProduct)
-      .catch(console.error)
+      .then((p) => {
+        setProduct(p);
+        if (p?.sizes?.length) setSelectedSize(p.sizes[0]);
+        if (p?.colors?.length) setSelectedColor(p.colors[0]);
+      })
+      .catch((err) => console.error(err))
       .finally(() => setLoading(false));
   }, [slug]);
 
@@ -52,16 +59,17 @@ export default function ProductPage() {
     );
   }
 
-  const images = product.images?.length ? product.images : [];
+  const images = (product.images || []).map((img) => getImageUrl(img)).filter(Boolean);
   const isOOS = product.status === "out_of_stock" || product.stock === 0;
   const isWishlisted = isInWishlist(product.id || "");
+  const mainImage = getImageUrl(product.thumbnail) || images[0] || "";
 
   const handleAddToCart = () => {
     addItem({
       productId: product.id!,
       name: product.name,
       price: product.price,
-      image: product.thumbnail || images[0] || "",
+      image: mainImage,
       slug: product.slug,
       quantity,
       size: selectedSize || undefined,
@@ -77,7 +85,7 @@ export default function ProductPage() {
       name: product.name,
       price: product.price,
       compareAtPrice: product.compareAtPrice,
-      image: product.thumbnail || images[0] || "",
+      image: mainImage,
       slug: product.slug,
       category: product.category,
     });
@@ -116,7 +124,7 @@ export default function ProductPage() {
                       activeImage === i ? "border-[#F4512C]" : "border-[#E6E6E3] hover:border-gray-400"
                     }`}
                   >
-                    <Image src={img} alt={`View ${i + 1}`} fill className="object-cover" />
+                    <SafeImage src={img} alt={`View ${i + 1}`} fill sizes="80px" className="object-cover" />
                   </button>
                 ))}
               </div>
@@ -124,11 +132,12 @@ export default function ProductPage() {
 
             <div className="relative flex-1 aspect-[4/5] bg-[#F5F5F3] rounded-3xl overflow-hidden border border-[#E6E6E3]">
               {images.length > 0 ? (
-                <Image
+                <SafeImage
                   src={images[activeImage]}
                   alt={product.name}
                   fill
                   priority
+                  sizes="(max-width: 1024px) 100vw, 58vw"
                   className="object-cover"
                 />
               ) : (

@@ -15,16 +15,21 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 mb-16">
           {/* Brand Column */}
           <div className="lg:col-span-2 space-y-4">
-            <Link href="/" className="flex items-center gap-2">
-              <span className="h-8 w-8 rounded-full bg-[#F4512C] text-white flex items-center justify-center font-bold text-sm">
-                N
+            <Link href="/" className="flex items-center gap-2.5">
+              <span className="h-8 w-8 rounded-full bg-[#F4512C] text-white flex items-center justify-center font-extrabold text-xs tracking-tighter shadow-sm flex-shrink-0">
+                CT
               </span>
-              <span className="font-bold text-xl tracking-tight text-white">
-                STREET<span className="text-[#F4512C]">MODE</span>
-              </span>
+              <div className="flex flex-col text-left">
+                <span className="font-extrabold text-base md:text-lg tracking-tight text-white leading-none">
+                  CLASSIC <span className="text-[#F4512C]">THREAD</span>
+                </span>
+                <span className="text-[9px] font-bold tracking-widest text-gray-400 uppercase mt-0.5 leading-none">
+                  MJ FASHION HUB
+                </span>
+              </div>
             </Link>
             <p className="text-xs text-gray-400 max-w-sm leading-relaxed">
-              Curated fashion, electronics, and lifestyle products designed for modern living. Quality crafted, sustainably sourced, and delivered worldwide.
+              Curated apparel, footwear, accessories, and modern lifestyle fashion. Premium crafted, quality checked, and delivered with care.
             </p>
             <div className="flex items-center gap-3 pt-2">
               <Link href="#" aria-label="Instagram" className="h-9 w-9 bg-white/10 rounded-full flex items-center justify-center text-gray-300 hover:bg-[#F4512C] hover:text-white transition-colors">
@@ -83,7 +88,7 @@ export function Footer() {
 
         {/* Bottom Strip */}
         <div className="pt-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-gray-500">
-          <p>© {new Date().getFullYear()} STREET MODE. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} CLASSIC THREAD — MJ FASHION HUB. All rights reserved.</p>
           
           <div className="flex items-center gap-4 text-gray-400 text-lg">
             <FaCcVisa className="hover:text-white transition-colors" />

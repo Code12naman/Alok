@@ -1,5 +1,7 @@
 "use client";
 
+import { SafeImage } from "@/components/ui/SafeImage";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -168,7 +170,7 @@ export default function OrderDetailsPage() {
                 <div key={idx} className="flex items-center gap-3 bg-[#F7F7F5] p-3 rounded-2xl border border-[#E6E6E3]">
                   <div className="relative h-16 w-16 rounded-xl overflow-hidden bg-white flex-shrink-0 border border-[#E6E6E3]">
                     {item.image ? (
-                      <Image src={item.image} alt={item.name} fill className="object-cover" />
+                      <SafeImage src={item.image} alt={item.name} fill sizes="64px" className="object-cover" />
                     ) : (
                       <ShoppingBag className="h-6 w-6 text-gray-300 m-auto" />
                     )}
