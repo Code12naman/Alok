@@ -134,11 +134,23 @@ export function CyberProductCard({ product, index = 0 }: ProductCardProps) {
           {/* Ratings */}
           <div className="flex items-center gap-1.5 mt-1.5">
             <div className="flex items-center text-[#F4A623]">
-              {Array(5).fill(null).map((_, i) => (
-                <Star key={i} className="h-3 w-3 fill-[#F4A623]" />
+              {[1, 2, 3, 4, 5].map((star) => (
+                <Star
+                  key={star}
+                  className={`h-3 w-3 ${
+                    star <= Math.round(product.averageRating || 4.8)
+                      ? "fill-[#F4A623] text-[#F4A623]"
+                      : "text-gray-300"
+                  }`}
+                />
               ))}
             </div>
-            <span className="text-[10px] text-gray-400 font-medium">(128)</span>
+            <span className="text-[10px] text-[#111111] font-bold">
+              {(product.averageRating || 4.8).toFixed(1)}
+            </span>
+            <span className="text-[10px] text-gray-400 font-medium">
+              ({product.reviewCount ?? 128})
+            </span>
           </div>
         </div>
 

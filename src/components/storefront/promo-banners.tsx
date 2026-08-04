@@ -19,13 +19,18 @@ export function PromoBanners() {
   useEffect(() => {
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
-        if (prev.millis > 0) return { ...prev, millis: prev.millis - 1 };
-        if (prev.seconds > 0) return { ...prev, seconds: 59, millis: 99 };
-        if (prev.minutes > 0) return { ...prev, minutes: prev.minutes - 1, seconds: 59, millis: 99 };
-        if (prev.hours > 0) return { ...prev, hours: prev.hours - 1, minutes: 59, seconds: 59, millis: 99 };
-        return prev;
+        const totalSec = prev.hours * 3600 + prev.minutes * 60 + prev.seconds;
+        if (totalSec <= 0) {
+          return { hours: 0, minutes: 0, seconds: 0, millis: 0 };
+        }
+        const nextSec = totalSec - 1;
+        const hours = Math.floor(nextSec / 3600);
+        const minutes = Math.floor((nextSec % 3600) / 60);
+        const seconds = nextSec % 60;
+        const millis = Math.floor(Math.random() * 80) + 10;
+        return { hours, minutes, seconds, millis };
       });
-    }, 10);
+    }, 1000);
     return () => clearInterval(timer);
   }, []);
 

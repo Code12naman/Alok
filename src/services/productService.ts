@@ -63,6 +63,8 @@ export interface FirestoreProduct {
   trending: boolean;
   bestSeller: boolean;
   limitedDrop: boolean;
+  averageRating?: number;
+  reviewCount?: number;
   createdAt?: any;
   updatedAt?: any;
 }

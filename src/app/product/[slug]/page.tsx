@@ -11,6 +11,7 @@ import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { FiLoader, FiPackage } from "react-icons/fi";
 import { SafeImage } from "@/components/ui/SafeImage";
+import { ProductReviews } from "@/components/reviews/ProductReviews";
 
 export default function ProductPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -21,6 +22,8 @@ export default function ProductPage() {
   const [selectedColor, setSelectedColor] = useState<string>("");
   const [quantity, setQuantity] = useState(1);
   const [added, setAdded] = useState(false);
+  const [liveAverageRating, setLiveAverageRating] = useState<number | undefined>(undefined);
+  const [liveReviewCount, setLiveReviewCount] = useState<number | undefined>(undefined);
 
   const { addItem } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
@@ -31,6 +34,10 @@ export default function ProductPage() {
     getProductBySlug(slug)
       .then((p) => {
         setProduct(p);
+        if (p) {
+          setLiveAverageRating(p.averageRating);
+          setLiveReviewCount(p.reviewCount);
+        }
         if (p?.sizes?.length) setSelectedSize(p.sizes[0]);
         if (p?.colors?.length) setSelectedColor(p.colors[0]);
       })
@@ -167,11 +174,23 @@ export default function ProductPage() {
               {/* Rating */}
               <div className="flex items-center gap-2">
                 <div className="flex items-center text-[#F4A623]">
-                  {Array(5).fill(null).map((_, i) => (
-                    <Star key={i} className="h-4 w-4 fill-[#F4A623]" />
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star
+                      key={star}
+                      className={`h-4 w-4 ${
+                        star <= Math.round(liveAverageRating || 4.8)
+                          ? "fill-[#F4A623] text-[#F4A623]"
+                          : "text-gray-300"
+                      }`}
+                    />
                   ))}
                 </div>
-                <span className="text-xs text-gray-500 font-medium">(128 customer reviews)</span>
+                <span className="text-xs font-bold text-[#111111]">
+                  {(liveAverageRating || 4.8).toFixed(1)}
+                </span>
+                <span className="text-xs text-gray-500 font-medium">
+                  ({liveReviewCount ?? 128} customer {liveReviewCount === 1 ? "review" : "reviews"})
+                </span>
               </div>
             </div>
 
@@ -305,6 +324,17 @@ export default function ProductPage() {
 
           </div>
         </div>
+
+        {/* Product Reviews & Rating Section */}
+        <ProductReviews
+          productId={product.id!}
+          initialAverageRating={product.averageRating || 4.8}
+          initialReviewCount={product.reviewCount || 128}
+          onRatingUpdated={({ averageRating, reviewCount }) => {
+            setLiveAverageRating(averageRating);
+            setLiveReviewCount(reviewCount);
+          }}
+        />
 
       </div>
     </div>

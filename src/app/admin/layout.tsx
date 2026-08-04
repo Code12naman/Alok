@@ -7,7 +7,7 @@ import { AdminProtectedRoute } from "@/components/admin/AdminProtectedRoute";
 import { logoutUser } from "@/services/authService";
 import {
   FiHome, FiBox, FiPlusSquare, FiList, FiShoppingCart,
-  FiUsers, FiTag, FiSettings, FiLogOut, FiSearch,
+  FiUsers, FiTag, FiStar, FiSettings, FiLogOut, FiSearch,
   FiBell, FiMenu, FiX, FiChevronRight,
 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
@@ -26,6 +26,7 @@ const sidebarLinks = [
   { name: "Orders", href: "/admin/orders", icon: FiShoppingCart },
   { name: "Customers", href: "/admin/customers", icon: FiUsers },
   { name: "Coupons", href: "/admin/coupons", icon: FiTag },
+  { name: "Reviews", href: "/admin/reviews", icon: FiStar },
   { name: "Settings", href: "/admin/settings", icon: FiSettings },
 ];
 
