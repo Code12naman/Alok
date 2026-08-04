@@ -77,7 +77,7 @@ export function mergeCartItems(localItems: CartItem[], remoteItems: CartItem[]):
 }
 
 // 🔒 Sanitize items before saving to Firestore
-function sanitizeItems(items: CartItem[]): CartItem[] {
+function sanitizeItems(items: CartItem[]): Record<string, any>[] {
   return items.map(i => ({
     ...i,
     size: i.size ?? null,
