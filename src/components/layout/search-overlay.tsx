@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Search } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
+import Fuse from "fuse.js";
 import { getActiveProducts, FirestoreProduct, getImageUrl } from "@/services/productService";
 import { SafeImage } from "@/components/ui/SafeImage";
 
@@ -42,21 +42,26 @@ export function SearchOverlay({ isOpen, onClose }: SearchOverlayProps) {
     }
   }, [isOpen, loaded]);
 
+  // 🔍 Fuse.js fuzzy search
   useEffect(() => {
     if (!query.trim()) {
       setResults([]);
       return;
     }
-    const q = query.toLowerCase();
-    const filtered = allProducts
-      .filter(
-        (p) =>
-          p.name.toLowerCase().includes(q) ||
-          p.category?.toLowerCase().includes(q) ||
-          p.tags?.some((t) => t.toLowerCase().includes(q))
-      )
-      .slice(0, 8);
-    setResults(filtered);
+
+    const fuse = new Fuse(allProducts, {
+      keys: [
+        { name: "name", weight: 0.6 },
+        { name: "category", weight: 0.3 },
+        { name: "description", weight: 0.2 },
+        { name: "tags", weight: 0.2 },
+      ],
+      threshold: 0.35, // typo tolerance (lower = stricter)
+      includeScore: true,
+    });
+
+    const searchResults = fuse.search(query).slice(0, 10).map(r => r.item);
+    setResults(searchResults);
   }, [query, allProducts]);
 
   useEffect(() => {

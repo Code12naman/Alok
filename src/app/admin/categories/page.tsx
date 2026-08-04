@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { getCategories, addCategory, deleteCategory, updateCategory, FirestoreCategory } from "@/services/categoryService";
-import { uploadFile } from "@/services/storageService";
+import { uploadToCloudinary } from "@/services/cloudinaryService";
+import { auth } from "@/firebase/config";
 import { FiPlus, FiTrash2, FiEdit2, FiLoader, FiCheck, FiX, FiTag } from "react-icons/fi";
 import Image from "next/image";
 import { SafeImage } from "@/components/ui/SafeImage";
@@ -34,7 +35,25 @@ export default function CategoriesPage() {
     setSaving(true);
     try {
       let imageUrl = editId ? categories.find(c => c.id === editId)?.image : undefined;
-      if (imageFile) imageUrl = await uploadFile(imageFile, "categories");
+      if (imageFile) {
+  const user = auth.currentUser;
+
+  if (!user) {
+    throw new Error("You are not logged in.");
+  }
+
+  const idToken = await user.getIdToken(true);
+
+  console.log("Current User:", user.email);
+  console.log("Token Length:", idToken.length);
+
+  const uploaded = await uploadToCloudinary(
+    imageFile,
+    idToken
+  );
+
+  imageUrl = uploaded.url;
+}   
       if (editId) {
         await updateCategory(editId, { name, description, image: imageUrl, active: true });
         setToast("Category updated!");
