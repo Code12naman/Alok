@@ -201,7 +201,9 @@ export default function CheckoutPage() {
           items,
           selectedAddress,
           "COD",
-          "Pending"
+          "Pending",
+          undefined,
+          user.email || profile.email || ""
         );
         clearCart();
         router.push(`/checkout/success?orderId=${createdOrder.orderId}`);
@@ -228,7 +230,7 @@ export default function CheckoutPage() {
             amount: razorpayOrder.amount,
             keyId: razorpayOrder.keyId,
             customerName: selectedAddress.fullName || profile.name || "Customer",
-            customerEmail: profile.email || "",
+            customerEmail: profile.email || user.email || "",
             customerPhone: selectedAddress.phone || profile.phone || "",
           });
         } catch (err: any) {
@@ -262,7 +264,8 @@ export default function CheckoutPage() {
           {
             razorpayOrderId: rzpResponse.razorpay_order_id,
             razorpayPaymentId: rzpResponse.razorpay_payment_id,
-          }
+          },
+          user.email || profile.email || ""
         );
 
         clearCart();

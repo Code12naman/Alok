@@ -38,15 +38,40 @@ export interface OrderItem {
   subtotal: number;
 }
 
+export interface CustomerSnapshot {
+  name: string;
+  email: string;
+  phone: string;
+}
+
+export interface ShippingAddressSnapshot {
+  fullName: string;
+  phone: string;
+  building: string;
+  street: string;
+  addressLine1?: string;
+  addressLine2?: string;
+  landmark?: string;
+  city: string;
+  state: string;
+  pinCode: string;
+  postalCode?: string;
+  country: string;
+}
+
 export interface OrderData {
   id?: string;
+  orderNumber?: string;
   orderId: string;
   userId: string;
   customerId: string;
-  items: OrderItem[];
+  customer?: CustomerSnapshot;
+  shippingAddress?: ShippingAddressSnapshot;
   deliveryAddress: Address;
+  items: OrderItem[];
   subtotal: number;
   discount: number;
+  couponCode?: string;
   deliveryCharge: number;
   finalAmount: number;
   paymentMethod: PaymentMethod;
@@ -64,7 +89,34 @@ export interface OrderData {
   updatedAt?: any;
 }
 
-export type FirestoreOrder = OrderData;
+export interface NormalizedOrder {
+  id: string; // Firestore Doc ID
+  orderId: string; // e.g. STM-2026-847291
+  orderNumber: string;
+  userId: string;
+  customerId: string;
+  customer: CustomerSnapshot;
+  shippingAddress: ShippingAddressSnapshot;
+  deliveryAddress: ShippingAddressSnapshot;
+  items: OrderItem[];
+  subtotal: number;
+  discount: number;
+  couponCode?: string;
+  deliveryCharge: number;
+  finalAmount: number;
+  paymentMethod: PaymentMethod;
+  paymentStatus: PaymentStatus;
+  orderStatus: OrderStatus;
+  status: OrderStatus;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  createdAt?: any;
+  updatedAt?: any;
+  createdAtFormatted: string;
+  updatedAtFormatted?: string;
+}
+
+export type FirestoreOrder = NormalizedOrder;
 
 /**
  * Generates a unique order ID format STM-2026-847291
@@ -72,6 +124,40 @@ export type FirestoreOrder = OrderData;
 export function generateOrderId(): string {
   const random = Math.floor(100000 + Math.random() * 900000);
   return `STM-2026-${random}`;
+}
+
+/**
+ * Safely formats Firestore timestamps, Date objects, or string dates deterministically.
+ */
+export function formatOrderTimestamp(ts: any): string {
+  if (!ts) return "—";
+  try {
+    let date: Date;
+    if (typeof ts.toDate === "function") {
+      date = ts.toDate();
+    } else if (typeof ts.seconds === "number") {
+      date = new Date(ts.seconds * 1000);
+    } else if (ts instanceof Date) {
+      date = ts;
+    } else {
+      date = new Date(ts);
+    }
+    if (isNaN(date.getTime())) return "—";
+
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = months[date.getMonth()];
+    const year = date.getFullYear();
+
+    let hours = date.getHours();
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    const ampm = hours >= 12 ? "PM" : "AM";
+    hours = hours % 12 || 12;
+
+    return `${day} ${month} ${year}, ${hours}:${minutes} ${ampm}`;
+  } catch {
+    return "—";
+  }
 }
 
 /**
@@ -112,6 +198,139 @@ export function deepSanitizeFirestore<T>(val: T): T {
 }
 
 /**
+ * Normalizes raw Firestore order documents (new and legacy) to guarantee safe rendering.
+ */
+export function normalizeOrder(raw: any): NormalizedOrder {
+  if (!raw) {
+    return {
+      id: "UNKNOWN",
+      orderId: "UNKNOWN",
+      orderNumber: "UNKNOWN",
+      userId: "",
+      customerId: "",
+      customer: { name: "Customer", email: "Not available for this order", phone: "—" },
+      shippingAddress: {
+        fullName: "Customer",
+        phone: "—",
+        building: "",
+        street: "",
+        city: "",
+        state: "",
+        pinCode: "",
+        country: "India",
+      },
+      deliveryAddress: {
+        fullName: "Customer",
+        phone: "—",
+        building: "",
+        street: "",
+        city: "",
+        state: "",
+        pinCode: "",
+        country: "India",
+      },
+      items: [],
+      subtotal: 0,
+      discount: 0,
+      deliveryCharge: 0,
+      finalAmount: 0,
+      paymentMethod: "COD",
+      paymentStatus: "Pending",
+      orderStatus: "Order Confirmed",
+      status: "Order Confirmed",
+      createdAtFormatted: "—",
+    };
+  }
+
+  const docId = raw.id || raw.orderId || "UNKNOWN";
+  const oId = raw.orderId || raw.orderNumber || docId;
+  const num = raw.orderNumber || oId || `#${docId.slice(-8)}`;
+
+  // Extract address snapshot with full legacy fallbacks
+  const rawAddr = raw.shippingAddress || raw.deliveryAddress || {};
+  const fullName =
+    raw.customer?.name ||
+    rawAddr.fullName ||
+    raw.customerName ||
+    "Customer";
+  const phone =
+    raw.customer?.phone ||
+    rawAddr.phone ||
+    raw.customerPhone ||
+    "—";
+  const email =
+    raw.customer?.email ||
+    raw.customerEmail ||
+    "Not available for this order";
+
+  const addressSnapshot: ShippingAddressSnapshot = {
+    fullName,
+    phone,
+    building: rawAddr.building || rawAddr.addressLine1 || "",
+    street: rawAddr.street || rawAddr.addressLine2 || "",
+    addressLine1: rawAddr.addressLine1 || rawAddr.building || "",
+    addressLine2: rawAddr.addressLine2 || rawAddr.street || "",
+    landmark: rawAddr.landmark || undefined,
+    city: rawAddr.city || "",
+    state: rawAddr.state || "",
+    pinCode: rawAddr.pinCode || rawAddr.postalCode || "",
+    postalCode: rawAddr.postalCode || rawAddr.pinCode || "",
+    country: rawAddr.country || "India",
+  };
+
+  // Extract items
+  const rawItems = Array.isArray(raw.items) ? raw.items : Array.isArray(raw.products) ? raw.products : [];
+  const normalizedItems: OrderItem[] = rawItems.map((i: any) => ({
+    productId: i.productId || i.id || "",
+    name: i.name || "Product",
+    image: typeof i.image === "string" ? i.image : i.image?.url || "",
+    price: Number(i.price) || 0,
+    quantity: Number(i.quantity) || 1,
+    size: i.size || undefined,
+    color: i.color || undefined,
+    subtotal: Number(i.subtotal) || (Number(i.price) || 0) * (Number(i.quantity) || 1),
+  }));
+
+  const sub = Number(raw.subtotal) || Number(raw.totalAmount) || Number(raw.finalAmount) || 0;
+  const disc = Number(raw.discount) || 0;
+  const del = Number(raw.deliveryCharge) ?? (sub >= 999 ? 0 : 99);
+  const fin = Number(raw.finalAmount) || Number(raw.totalAmount) || (sub + del - disc);
+
+  const statusVal: OrderStatus = raw.orderStatus || raw.status || "Order Confirmed";
+
+  return {
+    id: docId,
+    orderId: oId,
+    orderNumber: num,
+    userId: raw.userId || "",
+    customerId: raw.customerId || raw.userId || "—",
+    customer: {
+      name: fullName,
+      email: email,
+      phone: phone,
+    },
+    shippingAddress: addressSnapshot,
+    deliveryAddress: addressSnapshot,
+    items: normalizedItems,
+    subtotal: sub,
+    discount: disc,
+    couponCode: raw.couponCode || undefined,
+    deliveryCharge: del,
+    finalAmount: fin,
+    paymentMethod: raw.paymentMethod || "COD",
+    paymentStatus: raw.paymentStatus || (raw.paymentMethod === "Razorpay" ? "Paid" : "Pending"),
+    orderStatus: statusVal,
+    status: statusVal,
+    razorpayOrderId: raw.razorpayOrderId || undefined,
+    razorpayPaymentId: raw.razorpayPaymentId || undefined,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+    createdAtFormatted: formatOrderTimestamp(raw.createdAt),
+    updatedAtFormatted: raw.updatedAt ? formatOrderTimestamp(raw.updatedAt) : undefined,
+  };
+}
+
+/**
  * Creates a new order in Firestore and decrements inventory stock.
  */
 export const createOrder = async (
@@ -121,8 +340,10 @@ export const createOrder = async (
   address: Address,
   paymentMethod: PaymentMethod,
   paymentStatus: PaymentStatus = "Pending",
-  razorpayDetails?: { razorpayOrderId?: string; razorpayPaymentId?: string }
-): Promise<OrderData> => {
+  razorpayDetails?: { razorpayOrderId?: string; razorpayPaymentId?: string },
+  userEmail?: string,
+  couponDetails?: { couponCode?: string; discount?: number }
+): Promise<NormalizedOrder> => {
   if (!userId) {
     throw new Error("Authentication required: Order creation requires a logged-in user ID.");
   }
@@ -131,6 +352,7 @@ export const createOrder = async (
   }
 
   const orderId = generateOrderId();
+  const email = userEmail || "";
 
   // 1. Audit and normalize every order item
   const orderItems: OrderItem[] = cartItems.map((i) => {
@@ -155,11 +377,18 @@ export const createOrder = async (
   });
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
+  const discount = couponDetails?.discount || 0;
   const deliveryCharge = subtotal >= 999 ? 0 : 99;
-  const discount = 0;
-  const finalAmount = subtotal + deliveryCharge - discount;
+  const finalAmount = Math.max(0, subtotal + deliveryCharge - discount);
 
-  // 2. Normalize shipping address snapshot
+  // 2. Customer snapshot
+  const customerSnapshot = {
+    name: address.fullName || "Customer",
+    email: email,
+    phone: address.phone || "",
+  };
+
+  // 3. Shipping address snapshot
   const normalizedAddress: Record<string, any> = {
     fullName: address.fullName || "",
     phone: address.phone || "",
@@ -177,30 +406,30 @@ export const createOrder = async (
   if (address.landmark && address.landmark.trim() !== "") {
     normalizedAddress.landmark = address.landmark.trim();
   }
-  if (address.type && address.type.trim() !== "") {
-    normalizedAddress.type = address.type.trim();
-  }
 
-  // 3. Construct base order payload
+  // 4. Construct base order payload
   const rawPayload: Record<string, any> = {
+    orderNumber: orderId,
     orderId,
     userId,
     customerId: customerId || "STU-CUSTOMER",
-    items: orderItems,
+    customer: customerSnapshot,
+    shippingAddress: normalizedAddress,
     deliveryAddress: normalizedAddress,
+    items: orderItems,
+    products: orderItems,
     subtotal,
     discount,
+    couponCode: couponDetails?.couponCode || "",
     deliveryCharge,
     finalAmount,
+    totalAmount: finalAmount,
+    customerName: address.fullName || "",
+    customerEmail: email,
     paymentMethod,
     paymentStatus,
     orderStatus: "Order Confirmed",
-    // Compatibility fields for admin panel
     status: "Order Confirmed",
-    totalAmount: finalAmount,
-    customerName: address.fullName || "",
-    customerEmail: "",
-    products: orderItems,
   };
 
   if (razorpayDetails?.razorpayOrderId) {
@@ -210,10 +439,9 @@ export const createOrder = async (
     rawPayload.razorpayPaymentId = razorpayDetails.razorpayPaymentId;
   }
 
-  // 4. Perform deep sanitization to guarantee NO undefined fields anywhere in the object tree
+  // 5. Deep sanitization to guarantee NO undefined fields
   const sanitizedPayload = deepSanitizeFirestore(rawPayload);
 
-  // Add timestamps after sanitization
   const finalPayload = {
     ...sanitizedPayload,
     createdAt: serverTimestamp(),
@@ -225,7 +453,7 @@ export const createOrder = async (
   const docRef = await addDoc(collection(db, "orders"), finalPayload);
   console.log(`[OrderService] Order created successfully with Firestore doc ID: ${docRef.id}`);
 
-  // 5. Decrement stock in background
+  // 6. Decrement stock in background
   try {
     for (const item of cartItems) {
       if (!item.productId) continue;
@@ -241,27 +469,17 @@ export const createOrder = async (
     console.error("[OrderService] Failed to update product inventory stock:", err);
   }
 
-  return { id: docRef.id, ...finalPayload } as OrderData;
+  return normalizeOrder({ id: docRef.id, ...finalPayload });
 };
 
 /**
  * Fetches all orders (for admin panel).
  */
-export const getOrders = async (): Promise<FirestoreOrder[]> => {
+export const getOrders = async (): Promise<NormalizedOrder[]> => {
   try {
     const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
     const snap = await getDocs(q);
-    return snap.docs.map((d) => {
-      const data = d.data() as OrderData;
-      return {
-        id: d.id,
-        ...data,
-        status: data.status || data.orderStatus || "Order Confirmed",
-        totalAmount: data.totalAmount || data.finalAmount || 0,
-        customerName: data.customerName || data.deliveryAddress?.fullName || "Customer",
-        products: data.products || data.items || [],
-      };
-    });
+    return snap.docs.map((d) => normalizeOrder({ id: d.id, ...d.data() }));
   } catch (error) {
     console.error("Error fetching all orders:", error);
     return [];
@@ -283,7 +501,7 @@ export const updateOrderStatus = async (id: string, status: OrderStatus): Promis
 /**
  * Fetches all orders for a specific user.
  */
-export const getUserOrders = async (userId: string): Promise<OrderData[]> => {
+export const getUserOrders = async (userId: string): Promise<NormalizedOrder[]> => {
   if (!userId) {
     console.warn("[OrderService] getUserOrders called without userId.");
     return [];
@@ -307,7 +525,7 @@ export const getUserOrders = async (userId: string): Promise<OrderData[]> => {
       snap = await getDocs(fallbackQuery);
     }
 
-    const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as OrderData));
+    const docs = snap.docs.map((d) => normalizeOrder({ id: d.id, ...d.data() }));
     docs.sort((a, b) => {
       const timeA = a.createdAt?.seconds || 0;
       const timeB = b.createdAt?.seconds || 0;
@@ -323,21 +541,29 @@ export const getUserOrders = async (userId: string): Promise<OrderData[]> => {
 /**
  * Fetches an order by its unique orderId string (e.g. STM-2026-847291) or doc id.
  */
-export const getOrderById = async (orderId: string): Promise<OrderData | null> => {
+export const getOrderById = async (orderId: string): Promise<NormalizedOrder | null> => {
   try {
-    // Check by orderId field
+    // 1. Query by orderId field
     const q = query(collection(db, "orders"), where("orderId", "==", orderId));
     const snap = await getDocs(q);
     if (!snap.empty) {
       const d = snap.docs[0];
-      return { id: d.id, ...d.data() } as OrderData;
+      return normalizeOrder({ id: d.id, ...d.data() });
     }
 
-    // Fallback check by doc ID
+    // 2. Query by orderNumber field
+    const qNum = query(collection(db, "orders"), where("orderNumber", "==", orderId));
+    const snapNum = await getDocs(qNum);
+    if (!snapNum.empty) {
+      const d = snapNum.docs[0];
+      return normalizeOrder({ id: d.id, ...d.data() });
+    }
+
+    // 3. Fallback check by doc ID
     const docRef = doc(db, "orders", orderId);
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
-      return { id: docSnap.id, ...docSnap.data() } as OrderData;
+      return normalizeOrder({ id: docSnap.id, ...docSnap.data() });
     }
 
     return null;

@@ -65,25 +65,27 @@ export function CyberProductCard({ product, index = 0 }: ProductCardProps) {
       className="group flex flex-col bg-white rounded-2xl overflow-hidden border border-[#E6E6E3] hover:shadow-md transition-all duration-300 hover:-translate-y-1 relative"
     >
       {/* ── Image Container ── */}
-      <Link href={`/product/${productSlug}`} className="relative aspect-[4/5] bg-[#F5F5F3] overflow-hidden block">
-        {/* Image */}
-        {imageUrl ? (
-          <SafeImage
-            src={imageUrl}
-            alt={product.name}
-            fill
-            loading="lazy"
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-gray-300">
-            <ShoppingBag className="h-10 w-10" />
-          </div>
-        )}
+      <div className="relative aspect-[4/5] bg-[#F5F5F3] overflow-hidden block">
+        <Link href={`/product/${productSlug}`} className="absolute inset-0 z-0">
+          {/* Image */}
+          {imageUrl ? (
+            <SafeImage
+              src={imageUrl}
+              alt={product.name}
+              fill
+              loading="lazy"
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+              className="object-cover transition-transform duration-500 group-hover:scale-105"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-gray-300">
+              <ShoppingBag className="h-10 w-10" />
+            </div>
+          )}
+        </Link>
 
         {/* Top Badges */}
-        <div className="absolute top-3 left-3 z-10 flex flex-col gap-1">
+        <div className="absolute top-3 left-3 z-10 flex flex-col gap-1 pointer-events-none">
           {discount ? (
             <span className="bg-[#F4512C] text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
               -{discount}%
@@ -99,7 +101,7 @@ export function CyberProductCard({ product, index = 0 }: ProductCardProps) {
         <button
           onClick={handleToggleWishlist}
           aria-label="Toggle Wishlist"
-          className="absolute top-3 right-3 z-10 h-8 w-8 rounded-full bg-white/90 backdrop-blur-xs flex items-center justify-center text-gray-600 hover:text-[#F4512C] transition-colors shadow-2xs"
+          className="absolute top-3 right-3 z-10 h-8 w-8 rounded-full bg-white/90 backdrop-blur-xs flex items-center justify-center text-gray-600 hover:text-[#F4512C] transition-colors shadow-2xs cursor-pointer"
         >
           <Heart
             className={`h-4 w-4 transition-colors ${
@@ -113,12 +115,12 @@ export function CyberProductCard({ product, index = 0 }: ProductCardProps) {
           <button
             onClick={handleAddToCart}
             aria-label="Add to cart"
-            className="absolute bottom-3 right-3 z-10 h-9 w-9 rounded-full bg-black text-white flex items-center justify-center hover:bg-[#F4512C] transition-colors shadow-md opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
+            className="absolute bottom-3 right-3 z-10 h-9 w-9 rounded-full bg-black text-white flex items-center justify-center hover:bg-[#F4512C] transition-colors shadow-md opacity-90 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity cursor-pointer"
           >
             <ShoppingBag className="h-4 w-4" />
           </button>
         )}
-      </Link>
+      </div>
 
       {/* ── Info Container ── */}
       <div className="p-4 flex flex-col flex-1 justify-between bg-white">
