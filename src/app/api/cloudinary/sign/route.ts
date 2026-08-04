@@ -129,8 +129,13 @@ export async function POST(request: Request) {
     }
 
     // 3. Generate signature parameters
+    const body = await request.json().catch(() => ({}));
+    const folder =
+      typeof body?.folder === "string" && body.folder.trim()
+        ? body.folder.trim()
+        : "street-mode/products";
+
     const timestamp = Math.round(Date.now() / 1000);
-    const folder = "street-mode/products";
 
     const paramsToSign = {
       timestamp,

@@ -30,13 +30,17 @@ export interface UploadSignatureResponse {
 /**
  * Fetches signed upload credentials from our secure server API endpoint.
  */
-export const getSignedUploadParams = async (idToken: string): Promise<UploadSignatureResponse> => {
+export const getSignedUploadParams = async (
+  idToken: string,
+  folder: string = "street-mode/products"
+): Promise<UploadSignatureResponse> => {
   const res = await fetch("/api/cloudinary/sign", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${idToken}`,
     },
+    body: JSON.stringify({ folder }),
   });
 
   if (!res.ok) {
@@ -53,7 +57,8 @@ export const getSignedUploadParams = async (idToken: string): Promise<UploadSign
 export const uploadToCloudinary = async (
   file: File,
   idToken: string,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  folder: string = "street-mode/products"
 ): Promise<CloudinaryImage> => {
   // 1. Validate file
   const valError = validateImageFile(file);
@@ -62,8 +67,8 @@ export const uploadToCloudinary = async (
   }
 
   // 2. Obtain signature from server
-  const params = await getSignedUploadParams(idToken);
-  const { signature, timestamp, cloudName, apiKey, folder } = params;
+  const params = await getSignedUploadParams(idToken, folder);
+  const { signature, timestamp, cloudName, apiKey, folder: targetFolder } = params;
 
   // 3. Prepare FormData
   const formData = new FormData();
