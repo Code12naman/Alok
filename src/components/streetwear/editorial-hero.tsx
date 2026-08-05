@@ -54,7 +54,7 @@ export function EditorialHero() {
           poster="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&q=80&w=1200"
           className="h-full w-full object-cover object-center"
         >
-          <source src="/videos/use_white_background.mp4" type="video/mp4" />
+          <source src="/videos/add_more_scene_like_this.mp4" type="video/mp4" />
         </video>
       </div>
 

@@ -50,7 +50,7 @@ export function HeroSection() {
         poster="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&q=80&w=1400"
         className="absolute inset-0 w-full h-full object-cover object-center z-0 pointer-events-none"
       >
-        <source src="/videos/use_white_background.mp4" type="video/mp4" />
+        <source src="/videos/add_more_scene_like_this.mp4" type="video/mp4" />
       </video>
       {/* Bottom smooth fade to next section */}
       <div
