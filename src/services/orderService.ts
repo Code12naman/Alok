@@ -554,7 +554,7 @@ export const getOrders = async (): Promise<NormalizedOrder[]> => {
     return snap.docs.map((d) => normalizeOrder({ id: d.id, ...d.data() }));
   } catch (error) {
     console.error("Error fetching all orders:", error);
-    return [];
+    throw error;
   }
 };
 
