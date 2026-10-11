@@ -2,44 +2,44 @@
 
 import { SafeImage } from "@/components/ui/SafeImage";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Check,
   Shield,
   Lock,
   CreditCard,
   ShoppingBag,
   Plus,
   MapPin,
-  CheckCircle2,
   ArrowRight,
-  Phone,
   User,
-  Building,
-  Home,
   Truck,
-  Edit2,
   Trash2,
 } from "lucide-react";
-import Image from "next/image";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import {
   Address,
   getCustomerAddresses,
   addCustomerAddress,
-  setDefaultCustomerAddress,
   deleteCustomerAddress,
 } from "@/services/addressService";
-import { createOrder, generateOrderId, PaymentMethod } from "@/services/orderService";
-import { processRazorpayPayment } from "@/services/paymentService";
+import { generateOrderId, PaymentMethod } from "@/services/orderService";
+import { processRazorpayPayment, RazorpaySuccessResponse } from "@/services/paymentService";
 
 const inputClass =
-  "w-full bg-[#F7F7F5] border border-[#E6E6E3] rounded-xl px-4 py-3 text-xs text-[#111111] placeholder-gray-400 focus:outline-none focus:border-[#F4512C] transition-colors font-medium";
-const labelClass = "text-xs font-bold text-[#111111] block mb-1.5";
+  "w-full bg-secondary border border-border rounded-xl px-4 py-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-[#F4512C] transition-colors font-medium";
+const labelClass = "text-xs font-bold text-foreground block mb-1.5";
+
+function errorCode(error: unknown) {
+  return typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
 
 export default function CheckoutPage() {
   const { items, cartTotal, clearCart } = useCart();
@@ -54,11 +54,7 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Razorpay");
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>("");
-  const checkoutAttemptIdRef = useRef<string>("");
-
-  if (!checkoutAttemptIdRef.current) {
-    checkoutAttemptIdRef.current = generateOrderId();
-  }
+  const [checkoutAttemptId] = useState(() => generateOrderId());
 
   // Address Form State
   const [addrForm, setAddrForm] = useState({
@@ -87,11 +83,13 @@ export default function CheckoutPage() {
             setShowAddressForm(true);
           }
         })
-        .catch((err: any) => {
-          console.error("Error loading addresses on checkout:", err?.code, err?.message, err);
+        .catch((err: unknown) => {
+          console.error("Error loading addresses on checkout:", errorCode(err), errorMessage(err, ""), err);
         });
 
       if (profile) {
+        // Profile data is external state synchronized into the form.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setAddrForm((prev) => ({
           ...prev,
           fullName: prev.fullName || profile.name || "",
@@ -103,10 +101,12 @@ export default function CheckoutPage() {
 
   // Handle step transitions
   useEffect(() => {
-    if (user && step === 1) {
+    if (!authLoading && user && step === 1) {
+      // Advance only after Firebase authentication has finished initializing.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStep(2);
     }
-  }, [user, step]);
+  }, [authLoading, user, step]);
 
   const deliveryFee = cartTotal >= 999 || items.length === 0 ? 0 : 99;
   const finalTotal = cartTotal + deliveryFee;
@@ -153,14 +153,14 @@ export default function CheckoutPage() {
       setAddresses(updated);
       setSelectedAddressId(newId);
       setShowAddressForm(false);
-    } catch (err: any) {
-      console.error("Failed to save address:", err?.code, err?.message, err);
-      if (err?.code === "permission-denied") {
+    } catch (err: unknown) {
+      console.error("Failed to save address:", errorCode(err), errorMessage(err, ""), err);
+      if (errorCode(err) === "permission-denied") {
         setErrorMsg("Permission denied: Unable to write to database. Please check your login session.");
-      } else if (err?.code === "unauthenticated") {
+      } else if (errorCode(err) === "unauthenticated") {
         setErrorMsg("Please sign in before saving an address.");
       } else {
-        setErrorMsg(err?.message || "Failed to save address. Please try again.");
+        setErrorMsg(errorMessage(err, "Failed to save address. Please try again."));
       }
     } finally {
       setIsProcessing(false);
@@ -198,32 +198,51 @@ export default function CheckoutPage() {
     setErrorMsg("");
 
     try {
+      if (!selectedAddress.id) {
+        throw new Error("The selected delivery address is invalid. Please select it again.");
+      }
+      const idToken = await user.getIdToken();
+      const createServerOrder = async (details: {
+        paymentStatus: "Pending" | "Paid";
+        razorpayOrderId?: string;
+        razorpayPaymentId?: string;
+        razorpaySignature?: string;
+      }) => {
+        const response = await fetch("/api/checkout/create-order", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
+          body: JSON.stringify({
+            items,
+            addressId: selectedAddress.id,
+            paymentMethod,
+            checkoutAttemptId,
+            ...details,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Unable to create your order.");
+        }
+        return data as { orderId: string };
+      };
+
       if (paymentMethod === "COD") {
         // Cash on Delivery Flow
-        const createdOrder = await createOrder(
-          user.uid,
-          profile.customerId || "",
-          items,
-          selectedAddress,
-          "COD",
-          "Pending",
-          undefined,
-          user.email || profile.email || "",
-          undefined,
-          checkoutAttemptIdRef.current
-        );
+        const createdOrder = await createServerOrder({ paymentStatus: "Pending" });
         clearCart();
-        router.push(`/checkout/success?orderId=${createdOrder.orderId}`);
+        router.push(`/checkout/success?orderId=${encodeURIComponent(createdOrder.orderId)}`);
       } else {
         // Razorpay Payment Flow
-        const idToken = await user.getIdToken();
         const res = await fetch("/api/checkout/razorpay-order", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${idToken}`,
           },
-          body: JSON.stringify({ items, address: selectedAddress, checkoutAttemptId: checkoutAttemptIdRef.current }),
+          body: JSON.stringify({ items, address: selectedAddress, checkoutAttemptId }),
         });
 
         if (!res.ok) {
@@ -234,7 +253,7 @@ export default function CheckoutPage() {
         const razorpayOrder = await res.json();
 
         // Process Razorpay Checkout Modal
-        let rzpResponse: any = null;
+        let rzpResponse: RazorpaySuccessResponse | null = null;
         try {
           rzpResponse = await processRazorpayPayment({
             orderId: razorpayOrder.id,
@@ -244,12 +263,15 @@ export default function CheckoutPage() {
             customerEmail: profile.email || user.email || "",
             customerPhone: selectedAddress.phone || profile.phone || "",
           });
-        } catch (err: any) {
-          if (err.message?.includes("cancelled")) {
+        } catch (err: unknown) {
+          if (errorMessage(err, "").includes("cancelled")) {
             setIsProcessing(false);
             return;
           }
           throw err;
+        }
+        if (!rzpResponse) {
+          throw new Error("Razorpay did not return payment details.");
         }
 
         // Verify Payment Signature on Backend
@@ -262,7 +284,7 @@ export default function CheckoutPage() {
           body: JSON.stringify({
             ...rzpResponse,
             items,
-            checkoutAttemptId: checkoutAttemptIdRef.current,
+            checkoutAttemptId,
           }),
         });
 
@@ -272,28 +294,19 @@ export default function CheckoutPage() {
         }
 
         // Create Paid Order in Firestore
-        const createdOrder = await createOrder(
-          user.uid,
-          profile.customerId || "",
-          items,
-          selectedAddress,
-          "Razorpay",
-          "Paid",
-          {
-            razorpayOrderId: rzpResponse.razorpay_order_id,
-            razorpayPaymentId: rzpResponse.razorpay_payment_id,
-          },
-          user.email || profile.email || "",
-          undefined,
-          checkoutAttemptIdRef.current
-        );
+        const createdOrder = await createServerOrder({
+          paymentStatus: "Paid",
+          razorpayOrderId: rzpResponse.razorpay_order_id,
+          razorpayPaymentId: rzpResponse.razorpay_payment_id,
+          razorpaySignature: rzpResponse.razorpay_signature,
+        });
 
         clearCart();
-        router.push(`/checkout/success?orderId=${createdOrder.orderId}`);
+        router.push(`/checkout/success?orderId=${encodeURIComponent(createdOrder.orderId)}`);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Order processing error:", err);
-      setErrorMsg(err.message || "Failed to process order. Please try again.");
+      setErrorMsg(errorMessage(err, "Failed to process order. Please try again."));
     } finally {
       setIsProcessing(false);
     }
@@ -301,13 +314,13 @@ export default function CheckoutPage() {
 
   if (items.length === 0) {
     return (
-      <div className="min-h-screen bg-[#F7F7F5] flex items-center justify-center px-4 py-16">
-        <div className="bg-white border border-[#E6E6E3] rounded-3xl p-10 text-center max-w-md w-full shadow-xs">
-          <div className="h-16 w-16 bg-[#F7F7F5] rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400">
+      <div className="min-h-screen bg-background flex items-center justify-center px-4 py-16">
+        <div className="bg-card border border-border rounded-3xl p-10 text-center max-w-md w-full shadow-xs">
+          <div className="h-16 w-16 bg-secondary rounded-full flex items-center justify-center mx-auto mb-4 text-muted-foreground">
             <ShoppingBag className="h-8 w-8" />
           </div>
-          <h2 className="text-xl font-bold text-[#111111] mb-2">Your Cart is Empty</h2>
-          <p className="text-xs text-gray-500 mb-6 leading-relaxed">
+          <h2 className="text-xl font-bold text-card-foreground mb-2">Your Cart is Empty</h2>
+          <p className="text-xs text-muted-foreground mb-6 leading-relaxed">
             Add items to your cart before proceeding to checkout.
           </p>
           <Link
@@ -322,15 +335,15 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F7F5] py-10 md:py-16">
+    <div className="min-h-screen bg-background py-10 md:py-16">
       <div className="mx-auto max-w-5xl px-4 md:px-8">
         {/* Header & Steps Indicator */}
         <div className="text-center mb-10">
-          <h1 className="font-extrabold text-2xl md:text-3xl text-[#111111] tracking-tight mb-4">
+          <h1 className="font-extrabold text-2xl md:text-3xl text-foreground tracking-tight mb-4">
             Checkout
           </h1>
 
-          <div className="flex items-center justify-center gap-3 md:gap-5 text-xs font-bold text-gray-500">
+          <div className="flex items-center justify-center gap-3 md:gap-5 text-xs font-bold text-muted-foreground">
             <div className={`flex items-center gap-2 ${step >= 1 ? "text-[#F4512C]" : ""}`}>
               <span
                 className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
@@ -341,7 +354,7 @@ export default function CheckoutPage() {
               </span>
               Cart
             </div>
-            <div className="w-8 md:w-12 h-px bg-[#E6E6E3]" />
+            <div className="w-8 md:w-12 h-px bg-border" />
             <div className={`flex items-center gap-2 ${step >= 2 ? "text-[#F4512C]" : ""}`}>
               <span
                 className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
@@ -352,7 +365,7 @@ export default function CheckoutPage() {
               </span>
               Address
             </div>
-            <div className="w-8 md:w-12 h-px bg-[#E6E6E3]" />
+            <div className="w-8 md:w-12 h-px bg-border" />
             <div className={`flex items-center gap-2 ${step >= 3 ? "text-[#F4512C]" : ""}`}>
               <span
                 className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${
@@ -367,7 +380,7 @@ export default function CheckoutPage() {
         </div>
 
         {errorMsg && (
-          <div className="mb-6 bg-red-50 border border-red-200 text-red-600 text-xs p-4 rounded-2xl font-medium">
+          <div className="mb-6 bg-red-500/10 border border-red-500/30 text-red-600 dark:text-red-300 text-xs p-4 rounded-2xl font-medium">
             {errorMsg}
           </div>
         )}
@@ -383,14 +396,14 @@ export default function CheckoutPage() {
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -20 }}
-                  className="bg-white border border-[#E6E6E3] rounded-3xl p-6 md:p-8 shadow-xs text-center space-y-6"
+                  className="bg-card border border-border rounded-3xl p-6 md:p-8 shadow-xs text-center space-y-6"
                 >
                   <div className="h-16 w-16 bg-[#FFF3F0] text-[#F4512C] rounded-full flex items-center justify-center mx-auto">
                     <User className="h-8 w-8" />
                   </div>
                   <div>
-                    <h2 className="font-extrabold text-xl text-[#111111]">Account Sign In Required</h2>
-                    <p className="text-xs text-gray-500 max-w-sm mx-auto mt-1 leading-relaxed">
+                    <h2 className="font-extrabold text-xl text-card-foreground">Account Sign In Required</h2>
+                    <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1 leading-relaxed">
                       Please sign in or create an account to save your delivery address and manage your orders.
                     </p>
                   </div>
@@ -404,7 +417,7 @@ export default function CheckoutPage() {
                     </Link>
                     <Link
                       href="/register?redirect=/checkout"
-                      className="w-full bg-[#F7F7F5] border border-[#E6E6E3] hover:bg-gray-100 text-[#111111] text-xs font-bold py-3.5 rounded-xl transition-colors"
+                      className="w-full bg-secondary border border-border hover:bg-secondary/80 text-foreground text-xs font-bold py-3.5 rounded-xl transition-colors"
                     >
                       Create New Account
                     </Link>
@@ -419,12 +432,12 @@ export default function CheckoutPage() {
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -20 }}
-                  className="bg-white border border-[#E6E6E3] rounded-3xl p-6 md:p-8 shadow-xs space-y-6"
+                  className="bg-card border border-border rounded-3xl p-6 md:p-8 shadow-xs space-y-6"
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="font-extrabold text-lg text-[#111111]">Delivery Address</h2>
-                      <p className="text-xs text-gray-500">Select or add your shipping location</p>
+                      <h2 className="font-extrabold text-lg text-card-foreground">Delivery Address</h2>
+                      <p className="text-xs text-muted-foreground">Select or add your shipping location</p>
                     </div>
 
                     {!showAddressForm && (
@@ -439,7 +452,7 @@ export default function CheckoutPage() {
 
                   {/* Add New Address Form */}
                   {showAddressForm ? (
-                    <form onSubmit={handleSaveAddress} className="space-y-4 pt-2 border-t border-[#E6E6E3]">
+                    <form onSubmit={handleSaveAddress} className="space-y-4 pt-2 border-t border-border">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <label className={labelClass}>Full Name *</label>
@@ -538,7 +551,7 @@ export default function CheckoutPage() {
                           onChange={(e) => setAddrForm({ ...addrForm, isDefault: e.target.checked })}
                           className="rounded text-[#F4512C] focus:ring-[#F4512C]"
                         />
-                        <label htmlFor="isDefault" className="text-xs text-gray-700 font-medium">
+                        <label htmlFor="isDefault" className="text-xs text-foreground font-medium">
                           Set as default delivery address
                         </label>
                       </div>
@@ -555,7 +568,7 @@ export default function CheckoutPage() {
                           <button
                             type="button"
                             onClick={() => setShowAddressForm(false)}
-                            className="text-xs font-bold text-gray-500 hover:text-black py-3 px-4"
+                            className="text-xs font-bold text-muted-foreground hover:text-foreground py-3 px-4"
                           >
                             Cancel
                           </button>
@@ -571,8 +584,8 @@ export default function CheckoutPage() {
                           onClick={() => setSelectedAddressId(addr.id || "")}
                           className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 ${
                             selectedAddressId === addr.id
-                              ? "border-[#F4512C] bg-[#FFF3F0] ring-1 ring-[#F4512C]"
-                              : "border-[#E6E6E3] bg-[#F7F7F5] hover:border-gray-300"
+                              ? "border-[#F4512C] bg-orange-500/10 ring-1 ring-[#F4512C]"
+                              : "border-border bg-secondary hover:border-muted-foreground"
                           }`}
                         >
                           <div className="pt-0.5">
@@ -587,17 +600,17 @@ export default function CheckoutPage() {
 
                           <div className="flex-1 text-xs space-y-1">
                             <div className="flex items-center justify-between">
-                              <span className="font-bold text-[#111111]">{addr.fullName}</span>
+                              <span className="font-bold text-foreground">{addr.fullName}</span>
                               {addr.isDefault && (
                                 <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
                                   Default
                                 </span>
                               )}
                             </div>
-                            <p className="text-gray-600">
+                            <p className="text-muted-foreground">
                               {addr.building}, {addr.street}, {addr.city}, {addr.state} - {addr.pinCode}
                             </p>
-                            <p className="text-gray-500 font-medium">Phone: {addr.phone}</p>
+                            <p className="text-muted-foreground font-medium">Phone: {addr.phone}</p>
                           </div>
 
                           {addr.id && (
@@ -606,7 +619,7 @@ export default function CheckoutPage() {
                                 e.stopPropagation();
                                 handleDeleteAddr(addr.id!);
                               }}
-                              className="text-gray-400 hover:text-red-500 p-1"
+                              className="text-muted-foreground hover:text-red-500 p-1"
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
@@ -633,16 +646,16 @@ export default function CheckoutPage() {
                   initial={{ opacity: 0, x: 20 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -20 }}
-                  className="bg-white border border-[#E6E6E3] rounded-3xl p-6 md:p-8 shadow-xs space-y-6"
+                  className="bg-card border border-border rounded-3xl p-6 md:p-8 shadow-xs space-y-6"
                 >
                   <div className="flex items-center justify-between">
                     <div>
-                      <h2 className="font-extrabold text-lg text-[#111111]">Select Payment Method</h2>
-                      <p className="text-xs text-gray-500">100% Secure & Encrypted Transactions</p>
+                      <h2 className="font-extrabold text-lg text-card-foreground">Select Payment Method</h2>
+                      <p className="text-xs text-muted-foreground">100% Secure & Encrypted Transactions</p>
                     </div>
                     <button
                       onClick={() => setStep(2)}
-                      className="text-xs font-bold text-gray-500 hover:text-black cursor-pointer"
+                      className="text-xs font-bold text-muted-foreground hover:text-foreground cursor-pointer"
                     >
                       ← Edit Address
                     </button>
@@ -650,11 +663,11 @@ export default function CheckoutPage() {
 
                   {/* Selected Delivery Address Preview */}
                   {selectedAddress && (
-                    <div className="bg-[#F7F7F5] border border-[#E6E6E3] rounded-2xl p-4 text-xs space-y-1">
-                      <div className="flex items-center gap-2 font-bold text-[#111111]">
+                    <div className="bg-secondary border border-border rounded-2xl p-4 text-xs space-y-1">
+                      <div className="flex items-center gap-2 font-bold text-foreground">
                         <MapPin className="h-3.5 w-3.5 text-[#F4512C]" /> Delivering to: {selectedAddress.fullName}
                       </div>
-                      <p className="text-gray-600 pl-5">
+                      <p className="text-muted-foreground pl-5">
                         {selectedAddress.building}, {selectedAddress.street}, {selectedAddress.city} - {selectedAddress.pinCode}
                       </p>
                     </div>
@@ -667,8 +680,8 @@ export default function CheckoutPage() {
                       onClick={() => setPaymentMethod("Razorpay")}
                       className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
                         paymentMethod === "Razorpay"
-                          ? "border-[#F4512C] bg-[#FFF3F0] ring-1 ring-[#F4512C]"
-                          : "border-[#E6E6E3] bg-[#F7F7F5] hover:border-gray-300"
+                          ? "border-[#F4512C] bg-orange-500/10 ring-1 ring-[#F4512C]"
+                          : "border-border bg-secondary hover:border-muted-foreground"
                       }`}
                     >
                       <div className="flex items-center gap-3">
@@ -680,10 +693,10 @@ export default function CheckoutPage() {
                           className="accent-[#F4512C]"
                         />
                         <div>
-                          <span className="font-bold text-xs text-[#111111] block">
+                          <span className="font-bold text-xs text-foreground block">
                             Razorpay (UPI / Credit & Debit Cards / Net Banking / Wallets)
                           </span>
-                          <span className="text-[11px] text-gray-500">
+                          <span className="text-[11px] text-muted-foreground">
                             Instant online payment with GPay, PhonePe, Cards & Banking
                           </span>
                         </div>
@@ -696,8 +709,8 @@ export default function CheckoutPage() {
                       onClick={() => setPaymentMethod("COD")}
                       className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
                         paymentMethod === "COD"
-                          ? "border-[#F4512C] bg-[#FFF3F0] ring-1 ring-[#F4512C]"
-                          : "border-[#E6E6E3] bg-[#F7F7F5] hover:border-gray-300"
+                          ? "border-[#F4512C] bg-orange-500/10 ring-1 ring-[#F4512C]"
+                          : "border-border bg-secondary hover:border-muted-foreground"
                       }`}
                     >
                       <div className="flex items-center gap-3">
@@ -709,10 +722,10 @@ export default function CheckoutPage() {
                           className="accent-[#F4512C]"
                         />
                         <div>
-                          <span className="font-bold text-xs text-[#111111] block">
+                          <span className="font-bold text-xs text-foreground block">
                             Cash on Delivery (COD)
                           </span>
-                          <span className="text-[11px] text-gray-500">
+                          <span className="text-[11px] text-muted-foreground">
                             Pay in cash upon doorstep package delivery
                           </span>
                         </div>
@@ -753,36 +766,36 @@ export default function CheckoutPage() {
 
           {/* Sidebar Order Summary */}
           <div className="w-full lg:w-80 flex-shrink-0">
-            <div className="bg-white border border-[#E6E6E3] rounded-3xl p-6 shadow-xs sticky top-24 space-y-4">
-              <h3 className="font-bold text-sm text-[#111111]">Order Summary</h3>
+            <div className="bg-card border border-border rounded-3xl p-6 shadow-xs sticky top-24 space-y-4">
+              <h3 className="font-bold text-sm text-card-foreground">Order Summary</h3>
 
-              <div className="space-y-3 pb-4 border-b border-[#E6E6E3] max-h-60 overflow-y-auto">
+              <div className="space-y-3 pb-4 border-b border-border max-h-60 overflow-y-auto">
                 {items.map((item, i) => (
                   <div key={i} className="flex gap-3 text-xs">
-                    <div className="h-12 w-12 bg-[#F7F7F5] rounded-lg relative overflow-hidden flex-shrink-0 border border-[#E6E6E3]">
+                    <div className="h-12 w-12 bg-secondary rounded-lg relative overflow-hidden flex-shrink-0 border border-border">
                       {item.image ? (
                         <SafeImage src={item.image} alt={item.name} fill sizes="48px" className="object-cover" />
                       ) : (
-                        <ShoppingBag className="h-5 w-5 text-gray-300 m-auto" />
+                        <ShoppingBag className="h-5 w-5 text-muted-foreground m-auto" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-semibold text-[#111111] truncate">{item.name}</h4>
-                      <p className="text-gray-400 text-[10px]">
+                      <h4 className="font-semibold text-card-foreground truncate">{item.name}</h4>
+                      <p className="text-muted-foreground text-[10px]">
                         Qty: {item.quantity} {item.size ? `| Size: ${item.size}` : ""}
                       </p>
                     </div>
-                    <span className="font-bold text-[#111111]">
+                    <span className="font-bold text-card-foreground">
                       ₹{(item.price * item.quantity).toLocaleString("en-IN")}
                     </span>
                   </div>
                 ))}
               </div>
 
-              <div className="space-y-2 text-xs text-gray-600 pb-4 border-b border-[#E6E6E3]">
+              <div className="space-y-2 text-xs text-muted-foreground pb-4 border-b border-border">
                 <div className="flex justify-between">
                   <span>Subtotal</span>
-                  <span className="font-semibold text-black">₹{cartTotal.toLocaleString("en-IN")}</span>
+                  <span className="font-semibold text-foreground">₹{cartTotal.toLocaleString("en-IN")}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Delivery Charge</span>
@@ -792,7 +805,7 @@ export default function CheckoutPage() {
                 </div>
               </div>
 
-              <div className="flex justify-between items-center text-sm font-bold text-[#111111]">
+              <div className="flex justify-between items-center text-sm font-bold text-card-foreground">
                 <span>Total Amount</span>
                 <span className="text-base text-[#F4512C]">₹{finalTotal.toLocaleString("en-IN")}</span>
               </div>
