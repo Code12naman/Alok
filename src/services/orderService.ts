@@ -14,6 +14,7 @@ import {
 import { db } from "@/firebase/config";
 import { CartItem } from "@/context/CartContext";
 import { Address } from "./addressService";
+import { getImageUrl } from "./productService";
 
 export type PaymentMethod = "Razorpay" | "COD";
 export type PaymentStatus = "Pending" | "Paid" | "Failed" | "Refunded";
@@ -91,7 +92,7 @@ export interface OrderData {
 
 export interface NormalizedOrder {
   id: string; // Firestore Doc ID
-  orderId: string; // e.g. STM-2026-847291
+  orderId: string; // e.g. CT-ORD-20261011-A4F91C2D
   orderNumber: string;
   userId: string;
   customerId: string;
@@ -119,11 +120,15 @@ export interface NormalizedOrder {
 export type FirestoreOrder = NormalizedOrder;
 
 /**
- * Generates a unique order ID format STM-2026-847291
+ * Generates a readable order ID using the current date and cryptographically
+ * secure randomness. The Firestore document ID remains the internal identity.
  */
 export function generateOrderId(): string {
-  const random = Math.floor(100000 + Math.random() * 900000);
-  return `STM-2026-${random}`;
+  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const bytes = new Uint8Array(4);
+  globalThis.crypto.getRandomValues(bytes);
+  const suffix = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("").toUpperCase();
+  return `CT-ORD-${date}-${suffix}`;
 }
 
 /**
@@ -335,7 +340,7 @@ export function normalizeOrder(raw: any): NormalizedOrder {
  */
 export const createOrder = async (
   userId: string,
-  customerId: string,
+  _customerId: string,
   cartItems: CartItem[],
   address: Address,
   paymentMethod: PaymentMethod,
@@ -350,27 +355,61 @@ export const createOrder = async (
   if (!cartItems || cartItems.length === 0) {
     throw new Error("Cannot create order: Shopping cart is empty.");
   }
+  const profileSnapshot = await getDoc(doc(db, "users", userId));
+  const profileCustomerId = profileSnapshot.data()?.customerId;
+  if (!profileSnapshot.exists() || typeof profileCustomerId !== "string" || !profileCustomerId) {
+    throw new Error("Customer profile is incomplete. Please refresh your account and try again.");
+  }
+
+  if (razorpayDetails?.razorpayOrderId) {
+    const existing = await getDocs(
+      query(collection(db, "orders"), where("userId", "==", userId), where("razorpayOrderId", "==", razorpayDetails.razorpayOrderId))
+    );
+    if (!existing.empty) {
+      return normalizeOrder({ id: existing.docs[0].id, ...existing.docs[0].data() });
+    }
+  }
 
   const orderId = generateOrderId();
   const email = userEmail || "";
 
-  // 1. Audit and normalize every order item
-  const orderItems: OrderItem[] = cartItems.map((i) => {
-    const rawImage = typeof i.image === "string" ? i.image : (i.image as any)?.url || "";
+  // Re-read products before creating the immutable order snapshot. Cart prices and
+  // names are client state and must not be treated as authoritative.
+  const verifiedItems = await Promise.all(
+    cartItems.map(async (cartItem) => {
+      if (!cartItem.productId || cartItem.quantity < 1) {
+        throw new Error("The cart contains an invalid product or quantity.");
+      }
+      const productSnapshot = await getDoc(doc(db, "products", cartItem.productId));
+      if (!productSnapshot.exists()) {
+        throw new Error(`The product "${cartItem.name}" is no longer available.`);
+      }
+      const product = productSnapshot.data();
+      const stock = Number(product.stock) || 0;
+      if (product.status !== "active" || stock < cartItem.quantity) {
+        throw new Error(`"${product.name || cartItem.name}" is out of stock or unavailable.`);
+      }
+      return { cartItem, product };
+    })
+  );
+
+  // 1. Audit and normalize every order item using verified product data
+  const orderItems: OrderItem[] = verifiedItems.map(({ cartItem, product }) => {
+    const rawImage = getImageUrl(product.images?.[0]) || product.thumbnail || cartItem.image || "";
     const item: Record<string, any> = {
-      productId: i.productId || "",
-      name: i.name || "Product",
+      productId: cartItem.productId,
+      name: product.name || cartItem.name || "Product",
       image: rawImage,
-      price: Number(i.price) || 0,
-      quantity: Number(i.quantity) || 1,
-      subtotal: (Number(i.price) || 0) * (Number(i.quantity) || 1),
+      price: Number(product.price) || 0,
+      quantity: Number(cartItem.quantity),
+      subtotal: (Number(product.price) || 0) * Number(cartItem.quantity),
     };
 
-    if (i.size && typeof i.size === "string" && i.size.trim() !== "") {
-      item.size = i.size.trim();
+    if (cartItem.size && typeof cartItem.size === "string" && cartItem.size.trim() !== "") {
+      item.size = cartItem.size.trim();
     }
-    if (i.color && typeof i.color === "string" && i.color.trim() !== "") {
-      item.color = i.color.trim();
+    if (cartItem.color && typeof cartItem.color === "string" && cartItem.color.trim() !== "") {
+      item.color = cartItem.color.trim();
     }
 
     return item as OrderItem;
@@ -412,7 +451,7 @@ export const createOrder = async (
     orderNumber: orderId,
     orderId,
     userId,
-    customerId: customerId || "STU-CUSTOMER",
+    customerId: profileCustomerId,
     customer: customerSnapshot,
     shippingAddress: normalizedAddress,
     deliveryAddress: normalizedAddress,
@@ -539,7 +578,7 @@ export const getUserOrders = async (userId: string): Promise<NormalizedOrder[]> 
 };
 
 /**
- * Fetches an order by its unique orderId string (e.g. STM-2026-847291) or doc id.
+ * Fetches an order by its unique readable orderId or Firestore document id.
  */
 export const getOrderById = async (orderId: string): Promise<NormalizedOrder | null> => {
   try {

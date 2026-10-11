@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { SlidersHorizontal, X, Search, ChevronDown } from "lucide-react";
+import { SlidersHorizontal, X, Search } from "lucide-react";
 import { getActiveProducts, FirestoreProduct } from "@/services/productService";
 import { getCategories, FirestoreCategory } from "@/services/categoryService";
 import { CyberProductCard } from "@/components/streetwear/product-card";
@@ -15,14 +16,31 @@ const sortOptions = [
   { value: "price_desc", label: "Price: High → Low" },
 ];
 
-export default function ShopPage() {
+function ShopContent() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [products, setProducts] = useState<FirestoreProduct[]>([]);
   const [categories, setCategories] = useState<FirestoreCategory[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeCategory, setActiveCategory] = useState("All");
-  const [sort, setSort] = useState("newest");
   const [search, setSearch] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const categoryParam = searchParams.get("category")?.trim() || "";
+  const activeCategory = categoryParam || "All";
+  const sort = searchParams.get("sort") || "newest";
+
+  const normalizeCategory = (category?: string) =>
+    (category || "").trim().toLowerCase();
+
+  const updateShopQuery = (key: string, value?: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) {
+      params.set(key, value);
+    } else {
+      params.delete(key);
+    }
+    router.push(`${pathname}${params.toString() ? `?${params.toString()}` : ""}`);
+  };
 
   useEffect(() => {
     if (sidebarOpen) {
@@ -45,36 +63,33 @@ export default function ShopPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const getEffectiveCategory = (cat?: string) => {
-    if (!cat) return "Others";
-    if (["Electronics", "Beauty", "Home Decor", "Fashion"].includes(cat)) {
-      return "Others";
-    }
-    return cat;
-  };
-
   const filtered = products
     .filter((p) => {
-      if (activeCategory === "All") return true;
-      const normalized = getEffectiveCategory(p.category);
-      return normalized === activeCategory || p.category === activeCategory;
+      if (!categoryParam) return true;
+      return normalizeCategory(p.category) === normalizeCategory(categoryParam);
     })
     .filter((p) => !search || p.name.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
       if (sort === "price_asc") return a.price - b.price;
       if (sort === "price_desc") return b.price - a.price;
+      if (sort === "popular") return (b.averageRating || 0) - (a.averageRating || 0);
+      if (sort === "newest") {
+        const aTime = a.createdAt?.toMillis?.() || (a.createdAt ? new Date(a.createdAt).getTime() : 0);
+        const bTime = b.createdAt?.toMillis?.() || (b.createdAt ? new Date(b.createdAt).getTime() : 0);
+        return bTime - aTime;
+      }
       return 0;
     });
 
-  const CategorySidebar = () => (
+  const renderCategorySidebar = () => (
     <div className="space-y-6">
       <div>
         <h3 className="font-bold text-sm text-[#111111] mb-3 uppercase tracking-wider">Categories</h3>
         <div className="space-y-1">
           <button
-            onClick={() => setActiveCategory("All")}
+            onClick={() => updateShopQuery("category")}
             className={`w-full text-left flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
-              activeCategory === "All"
+              !categoryParam
                 ? "bg-[#F4512C] text-white"
                 : "text-gray-600 hover:bg-[#F7F7F5] hover:text-[#111111]"
             }`}
@@ -86,19 +101,21 @@ export default function ShopPage() {
           </button>
 
           {categories.map((cat) => {
-            const count = products.filter((p) => p.category === cat.name).length;
+            const count = products.filter(
+              (p) => normalizeCategory(p.category) === normalizeCategory(cat.name)
+            ).length;
             return (
               <button
                 key={cat.id}
-                onClick={() => setActiveCategory(cat.name)}
+                onClick={() => updateShopQuery("category", cat.name)}
                 className={`w-full text-left flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
-                  activeCategory === cat.name
+                  normalizeCategory(activeCategory) === normalizeCategory(cat.name)
                     ? "bg-[#F4512C] text-white"
                     : "text-gray-600 hover:bg-[#F7F7F5] hover:text-[#111111]"
                 }`}
               >
                 <span>{cat.name}</span>
-                <span className={activeCategory === cat.name ? "text-white/80" : "text-gray-400"}>
+                <span className={normalizeCategory(activeCategory) === normalizeCategory(cat.name) ? "text-white/80" : "text-gray-400"}>
                   {count}
                 </span>
               </button>
@@ -107,9 +124,9 @@ export default function ShopPage() {
         </div>
       </div>
 
-      {activeCategory !== "All" && (
+      {categoryParam && (
         <button
-          onClick={() => setActiveCategory("All")}
+          onClick={() => updateShopQuery("category")}
           className="text-xs font-bold text-[#F4512C] hover:underline flex items-center gap-1"
         >
           <X className="h-3.5 w-3.5" /> Reset Filters
@@ -161,7 +178,7 @@ export default function ShopPage() {
               <span className="hidden sm:inline">Sort by:</span>
               <select
                 value={sort}
-                onChange={(e) => setSort(e.target.value)}
+                onChange={(e) => updateShopQuery("sort", e.target.value === "newest" ? undefined : e.target.value)}
                 className="bg-[#F7F7F5] border border-[#E6E6E3] rounded-xl px-3 py-2 text-xs font-bold text-[#111111] focus:outline-none cursor-pointer"
               >
                 {sortOptions.map((opt) => (
@@ -179,7 +196,7 @@ export default function ShopPage() {
           
           {/* Desktop Sidebar */}
           <aside className="hidden lg:block w-60 flex-shrink-0 bg-white p-5 rounded-2xl border border-[#E6E6E3] shadow-xs h-fit sticky top-24">
-            <CategorySidebar />
+            {renderCategorySidebar()}
           </aside>
 
           {/* Mobile Drawer */}
@@ -206,7 +223,7 @@ export default function ShopPage() {
                       <X className="h-5 w-5" />
                     </button>
                   </div>
-                  <CategorySidebar />
+                  {renderCategorySidebar()}
                 </motion.div>
               </>
             )}
@@ -221,13 +238,22 @@ export default function ShopPage() {
             ) : filtered.length === 0 ? (
               <div className="bg-white rounded-2xl border border-[#E6E6E3] p-12 text-center">
                 <FiPackage className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-                <h3 className="font-bold text-base text-[#111111] mb-1">No products found</h3>
-                <p className="text-xs text-gray-500 mb-4">Try clearing your filters or search terms.</p>
+                <h3 className="font-bold text-base text-[#111111] mb-1">
+                  {categoryParam ? `No ${categoryParam} products found` : "No products found"}
+                </h3>
+                <p className="text-xs text-gray-500 mb-4">
+                  {categoryParam
+                    ? "There are no products in this category yet."
+                    : "Try clearing your filters or search terms."}
+                </p>
                 <button
-                  onClick={() => { setSearch(""); setActiveCategory("All"); }}
+                  onClick={() => {
+                    setSearch("");
+                    updateShopQuery("category");
+                  }}
                   className="bg-[#F4512C] text-white text-xs font-bold px-4 py-2.5 rounded-xl"
                 >
-                  Clear All Filters
+                  {categoryParam ? "View All Products" : "Clear All Filters"}
                 </button>
               </div>
             ) : (
@@ -243,5 +269,19 @@ export default function ShopPage() {
 
       </div>
     </div>
+  );
+}
+
+export default function ShopPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#F7F7F5] flex items-center justify-center">
+          <FiLoader className="h-8 w-8 text-[#F4512C] animate-spin" />
+        </div>
+      }
+    >
+      <ShopContent />
+    </Suspense>
   );
 }

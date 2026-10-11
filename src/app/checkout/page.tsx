@@ -197,7 +197,7 @@ export default function CheckoutPage() {
         // Cash on Delivery Flow
         const createdOrder = await createOrder(
           user.uid,
-          profile.customerId || "STU-CUSTOMER",
+          profile.customerId || "",
           items,
           selectedAddress,
           "COD",
@@ -209,9 +209,13 @@ export default function CheckoutPage() {
         router.push(`/checkout/success?orderId=${createdOrder.orderId}`);
       } else {
         // Razorpay Payment Flow
+        const idToken = await user.getIdToken();
         const res = await fetch("/api/checkout/razorpay-order", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
           body: JSON.stringify({ items, address: selectedAddress }),
         });
 
@@ -244,7 +248,10 @@ export default function CheckoutPage() {
         // Verify Payment Signature on Backend
         const verifyRes = await fetch("/api/checkout/verify-payment", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${idToken}`,
+          },
           body: JSON.stringify(rzpResponse),
         });
 
@@ -256,7 +263,7 @@ export default function CheckoutPage() {
         // Create Paid Order in Firestore
         const createdOrder = await createOrder(
           user.uid,
-          profile.customerId || "STU-CUSTOMER",
+          profile.customerId || "",
           items,
           selectedAddress,
           "Razorpay",

@@ -74,7 +74,7 @@ export function CategoryGrid({ categories = [] }: CategoryGridProps) {
           </h2>
 
           <Link
-            href="/categories"
+            href="/shop"
             className="flex items-center gap-1 text-xs font-bold text-[#F4512C] hover:text-[#DD3F1E]"
           >
             View All Categories

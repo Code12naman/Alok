@@ -28,8 +28,7 @@ const navLinks = [
       { name: "Others", href: "/shop?category=Others" },
     ],
   },
-  { name: "About", href: "/about" },
-  { name: "Contact", href: "/checkout" },
+  { name: "Contact", href: "/contact" },
 ];
 
 export function Navbar() {

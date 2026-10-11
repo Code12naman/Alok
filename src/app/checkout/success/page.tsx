@@ -50,7 +50,7 @@ function CheckoutSuccessContent() {
 
             <div className="inline-block bg-[#F7F7F5] border border-[#E6E6E3] rounded-xl px-4 py-2 mt-2">
               <span className="text-xs font-bold text-[#111111]">
-                Order ID: <strong className="text-[#F4512C]">{orderId || "STM-2026-847291"}</strong>
+                Order ID: <strong className="text-[#F4512C]">{orderId || "—"}</strong>
               </span>
             </div>
           </div>

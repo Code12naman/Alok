@@ -1,16 +1,20 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
+import { verifyFirebaseBearerToken } from "@/lib/server-auth";
 
 export async function POST(request: Request) {
   try {
+    await verifyFirebaseBearerToken(request);
     const body = await request.json();
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = body;
 
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
     if (!keySecret) {
-      // In development/test mode without API keys, accept payment verification securely
-      return NextResponse.json({ verified: true, isSimulated: true });
+      return NextResponse.json(
+        { error: "Razorpay verification is not configured.", verified: false },
+        { status: 503 }
+      );
     }
 
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
@@ -33,11 +37,17 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error verifying payment signature:", error);
+    const message = error instanceof Error ? error.message : "Server error verifying signature";
+    const status = message.includes("Authentication") || message.includes("token")
+      ? 401
+      : message.includes("not configured")
+        ? 503
+        : 500;
     return NextResponse.json(
-      { error: error.message || "Server error verifying signature", verified: false },
-      { status: 500 }
+      { error: message, verified: false },
+      { status }
     );
   }
 }

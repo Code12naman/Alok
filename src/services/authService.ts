@@ -7,7 +7,7 @@ import {
   sendPasswordResetEmail,
   User,
 } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../firebase/config";
 
 const googleProvider = new GoogleAuthProvider();
@@ -17,16 +17,25 @@ export type UserRole = "admin" | "customer";
 export interface UserData {
   uid: string;
   name: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
   email: string | null;
   phone?: string | null;
+  dateOfBirth?: string | null;
   customerId?: string;
   role: UserRole;
-  createdAt?: any;
+  createdAt?: unknown;
 }
 
-export function generateCustomerId(): string {
-  const random = Math.floor(100000 + Math.random() * 900000);
-  return `STU-${random}`;
+export function generateCustomerId(uid: string): string {
+  if (!uid) {
+    throw new Error("An authenticated Firebase UID is required to generate a customer ID.");
+  }
+  return customerIdForUid(uid);
+}
+
+function customerIdForUid(uid: string): string {
+  return `CT-CUS-${uid.toUpperCase()}`;
 }
 
 /**
@@ -41,7 +50,7 @@ export const checkAndCreateUserDoc = async (
   const userSnap = await getDoc(userRef);
 
   if (!userSnap.exists()) {
-    const customerId = generateCustomerId();
+    const customerId = generateCustomerId(user.uid);
     const userData: UserData = {
       uid: user.uid,
       name: extraData.name || user.displayName || "",
@@ -55,31 +64,71 @@ export const checkAndCreateUserDoc = async (
     return userData;
   }
 
-  return userSnap.data() as UserData;
+  const existing = userSnap.data() as UserData;
+  if (!existing.customerId) {
+    const customerId = generateCustomerId(user.uid);
+    await updateDoc(userRef, { customerId });
+    return { ...existing, customerId };
+  }
+  return existing;
 };
 
 /**
- * Registers a new customer with email/password, full name, phone number, and STU-XXXXXX customerId.
+ * Registers a new customer with email/password and a permanent UID-derived customer ID.
  */
-export const signUpCustomer = async (
-  email: string,
-  pass: string,
-  name: string,
-  phone: string
-): Promise<UserData> => {
-  const res = await createUserWithEmailAndPassword(auth, email, pass);
-  const customerId = generateCustomerId();
+export interface CustomerRegistration {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  phone: string;
+  dateOfBirth?: string;
+}
+
+export const signUpCustomer = async ({
+  firstName,
+  lastName,
+  email,
+  password,
+  phone,
+  dateOfBirth,
+}: CustomerRegistration): Promise<UserData> => {
+  const res = await createUserWithEmailAndPassword(auth, email.trim(), password);
+  const name = `${firstName.trim()} ${lastName.trim()}`.trim();
+  const customerId = generateCustomerId(res.user.uid);
   const userData: UserData = {
     uid: res.user.uid,
     name,
-    email,
-    phone,
+    firstName: firstName.trim(),
+    lastName: lastName.trim(),
+    email: res.user.email,
+    phone: phone.trim(),
+    dateOfBirth: dateOfBirth?.trim() || null,
     customerId,
     role: "customer",
     createdAt: serverTimestamp(),
   };
   await setDoc(doc(db, "users", res.user.uid), userData);
   return userData;
+};
+
+export const updateCustomerProfile = async (
+  uid: string,
+  data: Pick<UserData, "firstName" | "lastName" | "phone" | "dateOfBirth">
+): Promise<void> => {
+  if (!uid) throw new Error("Authentication required to update a profile.");
+  const firstName = data.firstName?.trim() || "";
+  const lastName = data.lastName?.trim() || "";
+  if (!firstName || !lastName || !data.phone?.trim()) {
+    throw new Error("First name, last name, and phone number are required.");
+  }
+  await updateDoc(doc(db, "users", uid), {
+    firstName,
+    lastName,
+    name: `${firstName} ${lastName}`,
+    phone: data.phone.trim(),
+    dateOfBirth: data.dateOfBirth?.trim() || null,
+  });
 };
 
 /**

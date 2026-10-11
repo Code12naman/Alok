@@ -17,19 +17,38 @@ import {
   Mail,
   Plus,
   Trash2,
+  Edit2,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { logoutUser, sendPasswordResetLink } from "@/services/authService";
-import { Address, getCustomerAddresses, deleteCustomerAddress, addCustomerAddress } from "@/services/addressService";
+import { logoutUser, sendPasswordResetLink, updateCustomerProfile } from "@/services/authService";
+import {
+  Address,
+  getCustomerAddresses,
+  deleteCustomerAddress,
+  addCustomerAddress,
+  updateCustomerAddress,
+} from "@/services/addressService";
 
 export default function AccountPage() {
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading, refreshProfile } = useAuth();
   const router = useRouter();
 
   const [activeTab, setActiveTab] = useState<"profile" | "addresses" | "password">("profile");
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [resetMsg, setResetMsg] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [profileForm, setProfileForm] = useState(() => {
+    const nameParts = (profile?.name || "").trim().split(/\s+/);
+    return {
+      firstName: profile?.firstName || nameParts[0] || "",
+      lastName: profile?.lastName || nameParts.slice(1).join(" ") || "",
+      phone: profile?.phone || "",
+      dateOfBirth: profile?.dateOfBirth || "",
+    };
+  });
+  const [profileMessage, setProfileMessage] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
 
   const [newAddr, setNewAddr] = useState({
     fullName: "",
@@ -68,9 +87,25 @@ export default function AccountPage() {
       try {
         await sendPasswordResetLink(user.email);
         setResetMsg(`Password reset link sent to ${user.email}`);
-      } catch (err: any) {
-        setResetMsg(err?.message || "Failed to send reset link.");
+      } catch (err: unknown) {
+        setResetMsg(err instanceof Error ? err.message : "Failed to send reset link.");
       }
+    }
+  };
+
+  const handleProfileSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    setProfileSaving(true);
+    setProfileMessage("");
+    try {
+      await updateCustomerProfile(user.uid, profileForm);
+      await refreshProfile();
+      setProfileMessage("Profile updated successfully.");
+    } catch (err: unknown) {
+      setProfileMessage(err instanceof Error ? err.message : "Could not update your profile.");
+    } finally {
+      setProfileSaving(false);
     }
   };
 
@@ -78,14 +113,35 @@ export default function AccountPage() {
     e.preventDefault();
     if (!user) return;
     try {
-      await addCustomerAddress(user.uid, newAddr);
+      if (editingAddressId) {
+        await updateCustomerAddress(user.uid, editingAddressId, newAddr);
+      } else {
+        await addCustomerAddress(user.uid, newAddr);
+      }
       const list = await getCustomerAddresses(user.uid);
       setAddresses(list);
       setShowAddModal(false);
+      setEditingAddressId(null);
       setNewAddr({ fullName: "", phone: "", building: "", street: "", city: "", state: "", pinCode: "", landmark: "" });
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleEditAddress = (address: Address) => {
+    if (!address.id) return;
+    setEditingAddressId(address.id);
+    setNewAddr({
+      fullName: address.fullName || "",
+      phone: address.phone || "",
+      building: address.building || address.addressLine1 || "",
+      street: address.street || address.addressLine2 || "",
+      city: address.city || "",
+      state: address.state || "",
+      pinCode: address.pinCode || address.postalCode || "",
+      landmark: address.landmark || "",
+    });
+    setShowAddModal(true);
   };
 
   const handleDeleteAddress = async (id: string) => {
@@ -120,7 +176,7 @@ export default function AccountPage() {
               <div className="flex items-center gap-2">
                 <h1 className="font-extrabold text-xl md:text-2xl text-[#111111]">{profile?.name || "Customer Account"}</h1>
                 <span className="bg-[#111111] text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full">
-                  {profile?.customerId || "STU-CUSTOMER"}
+                  {profile?.customerId || "—"}
                 </span>
               </div>
               <p className="text-xs text-gray-500 font-medium mt-1">{user.email}</p>
@@ -204,11 +260,52 @@ export default function AccountPage() {
             {activeTab === "profile" && (
               <div className="space-y-6">
                 <h2 className="font-extrabold text-lg text-[#111111]">Profile Details</h2>
+
+                <form onSubmit={handleProfileSave} className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-2xl border border-[#E6E6E3] bg-[#F7F7F5] p-4">
+                  <input
+                    required
+                    value={profileForm.firstName}
+                    onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
+                    placeholder="First name *"
+                    className="rounded-xl border border-[#E6E6E3] bg-white px-3 py-2.5 text-xs"
+                  />
+                  <input
+                    required
+                    value={profileForm.lastName}
+                    onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
+                    placeholder="Last name *"
+                    className="rounded-xl border border-[#E6E6E3] bg-white px-3 py-2.5 text-xs"
+                  />
+                  <input
+                    required
+                    type="tel"
+                    value={profileForm.phone}
+                    onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                    placeholder="Phone number *"
+                    className="rounded-xl border border-[#E6E6E3] bg-white px-3 py-2.5 text-xs"
+                  />
+                  <input
+                    type="date"
+                    value={profileForm.dateOfBirth}
+                    onChange={(e) => setProfileForm({ ...profileForm, dateOfBirth: e.target.value })}
+                    className="rounded-xl border border-[#E6E6E3] bg-white px-3 py-2.5 text-xs"
+                  />
+                  <div className="md:col-span-2 flex items-center justify-between gap-3">
+                    <span className="text-xs font-medium text-gray-500">{profileMessage}</span>
+                    <button
+                      type="submit"
+                      disabled={profileSaving}
+                      className="rounded-xl bg-[#F4512C] px-5 py-2.5 text-xs font-bold text-white disabled:opacity-60"
+                    >
+                      {profileSaving ? "Saving..." : "Save Profile"}
+                    </button>
+                  </div>
+                </form>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-[#F7F7F5] border border-[#E6E6E3] p-4 rounded-2xl space-y-1">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Customer ID</span>
-                    <span className="font-extrabold text-sm text-[#F4512C]">{profile?.customerId || "STU-CUSTOMER"}</span>
+                    <span className="font-extrabold text-sm text-[#F4512C]">{profile?.customerId || "—"}</span>
                   </div>
 
                   <div className="bg-[#F7F7F5] border border-[#E6E6E3] p-4 rounded-2xl space-y-1">
@@ -253,7 +350,9 @@ export default function AccountPage() {
 
                 {showAddModal && (
                   <form onSubmit={handleAddAddress} className="bg-[#F7F7F5] border border-[#E6E6E3] p-5 rounded-2xl space-y-3">
-                    <h3 className="font-bold text-xs text-[#111111]">New Address Details</h3>
+                    <h3 className="font-bold text-xs text-[#111111]">
+                      {editingAddressId ? "Edit Address" : "New Address Details"}
+                    </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                       <input
                         type="text"
@@ -321,11 +420,14 @@ export default function AccountPage() {
                     </div>
                     <div className="flex gap-2 pt-2">
                       <button type="submit" className="bg-[#F4512C] text-white text-xs font-bold px-5 py-2.5 rounded-xl">
-                        Save Address
+                        {editingAddressId ? "Update Address" : "Save Address"}
                       </button>
                       <button
                         type="button"
-                        onClick={() => setShowAddModal(false)}
+                        onClick={() => {
+                          setShowAddModal(false);
+                          setEditingAddressId(null);
+                        }}
                         className="text-xs font-bold text-gray-500 py-2.5 px-3"
                       >
                         Cancel
@@ -346,9 +448,14 @@ export default function AccountPage() {
                           <p className="text-gray-600">{addr.city}, {addr.state} - {addr.pinCode}</p>
                         </div>
                         {addr.id && (
-                          <button onClick={() => handleDeleteAddress(addr.id!)} className="text-gray-400 hover:text-red-500 p-1">
-                            <Trash2 className="h-4 w-4" />
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => handleEditAddress(addr)} className="text-gray-400 hover:text-[#F4512C] p-1">
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button onClick={() => handleDeleteAddress(addr.id!)} className="text-gray-400 hover:text-red-500 p-1">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
                         )}
                       </div>
                     ))}

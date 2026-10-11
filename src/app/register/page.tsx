@@ -4,13 +4,15 @@ import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { Mail, Lock, User, Phone, ArrowRight } from "lucide-react";
+import { Mail, Lock, User, Phone, ArrowRight, CalendarDays } from "lucide-react";
 import { signUpCustomer, signInWithGoogle } from "@/services/authService";
 
 function RegisterContent() {
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
@@ -24,8 +26,12 @@ function RegisterContent() {
     e.preventDefault();
     setError("");
 
-    if (!name.trim()) {
-      setError("Please enter your full name.");
+    if (!firstName.trim() || !lastName.trim()) {
+      setError("Please enter your first and last name.");
+      return;
+    }
+    if (!phone.trim()) {
+      setError("Please enter your phone number.");
       return;
     }
     if (password.length < 6) {
@@ -39,13 +45,23 @@ function RegisterContent() {
 
     setLoading(true);
     try {
-      await signUpCustomer(email, password, name.trim(), phone.trim());
+      await signUpCustomer({
+        firstName,
+        lastName,
+        email,
+        password,
+        phone,
+        dateOfBirth,
+      });
       router.push(redirectTarget);
-    } catch (err: any) {
-      if (err?.code === "auth/email-already-in-use") {
+    } catch (err: unknown) {
+      const code = typeof err === "object" && err !== null && "code" in err
+        ? String(err.code)
+        : "";
+      if (code === "auth/email-already-in-use") {
         setError("An account with this email already exists.");
       } else {
-        setError(err?.message || "Registration failed. Please try again.");
+        setError(err instanceof Error ? err.message : "Registration failed. Please try again.");
       }
     } finally {
       setLoading(false);
@@ -58,8 +74,8 @@ function RegisterContent() {
     try {
       await signInWithGoogle();
       router.push(redirectTarget);
-    } catch (err: any) {
-      setError(err?.message || "Google Sign-In failed.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Google Sign-In failed.");
     } finally {
       setLoading(false);
     }
@@ -94,14 +110,29 @@ function RegisterContent() {
 
         <form className="space-y-3.5" onSubmit={handleSubmit}>
           <div>
-            <label className="text-xs font-bold text-[#111111] block mb-1">Full Name</label>
+            <label className="text-xs font-bold text-[#111111] block mb-1">First Name</label>
             <div className="relative">
               <input
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
                 className="w-full bg-[#F7F7F5] border border-[#E6E6E3] rounded-xl px-4 py-2.5 pl-10 text-xs text-[#111111] placeholder-gray-400 focus:outline-none focus:border-[#F4512C]"
-                placeholder="John Doe"
+                placeholder="John"
+                required
+              />
+              <User className="h-4 w-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-[#111111] block mb-1">Last Name</label>
+            <div className="relative">
+              <input
+                type="text"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                className="w-full bg-[#F7F7F5] border border-[#E6E6E3] rounded-xl px-4 py-2.5 pl-10 text-xs text-[#111111] placeholder-gray-400 focus:outline-none focus:border-[#F4512C]"
+                placeholder="Doe"
                 required
               />
               <User className="h-4 w-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -120,6 +151,19 @@ function RegisterContent() {
                 required
               />
               <Mail className="h-4 w-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-[#111111] block mb-1">Date of Birth <span className="font-normal text-gray-400">(Optional)</span></label>
+              <div className="relative">
+                <input
+                  type="date"
+                  value={dateOfBirth}
+                  onChange={(e) => setDateOfBirth(e.target.value)}
+                  className="w-full bg-[#F7F7F5] border border-[#E6E6E3] rounded-xl px-4 py-2.5 pl-10 text-xs text-[#111111] focus:outline-none focus:border-[#F4512C]"
+                />
+                <CalendarDays className="h-4 w-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              </div>
             </div>
           </div>
 

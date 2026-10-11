@@ -59,7 +59,7 @@ export function Footer() {
           <div>
             <h4 className="font-bold text-xs uppercase tracking-wider text-gray-200 mb-4">Help & Support</h4>
             <ul className="space-y-2.5 text-xs text-gray-400">
-              <li><Link href="/checkout" className="hover:text-[#F4512C] transition-colors">Contact Us</Link></li>
+              <li><Link href="/contact" className="hover:text-[#F4512C] transition-colors">Contact Us</Link></li>
               <li><Link href="#" className="hover:text-[#F4512C] transition-colors">Shipping Information</Link></li>
               <li><Link href="#" className="hover:text-[#F4512C] transition-colors">Returns & Exchanges</Link></li>
               <li><Link href="#" className="hover:text-[#F4512C] transition-colors">FAQs</Link></li>

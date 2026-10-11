@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { onAuthStateChanged, User } from "firebase/auth";
 import { auth } from "../firebase/config";
-import { getUserProfile, UserData, UserRole } from "../services/authService";
+import { checkAndCreateUserDoc, getUserProfile, UserData, UserRole } from "../services/authService";
 
 interface AuthContextType {
   user: User | null;
@@ -36,8 +36,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setProfile(data);
         setRole(data.role);
       } else {
-        setProfile(null);
-        setRole(null);
+        const firebaseUser = auth.currentUser;
+        if (!firebaseUser) {
+          setProfile(null);
+          setRole(null);
+          return;
+        }
+        const created = await checkAndCreateUserDoc(firebaseUser);
+        setProfile(created);
+        setRole(created.role);
       }
     } catch (err) {
       console.error("AuthContext: failed to fetch profile", err);

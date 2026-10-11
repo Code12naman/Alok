@@ -1,21 +1,61 @@
 import { NextResponse } from "next/server";
-import crypto from "crypto";
+import { verifyFirebaseBearerToken } from "@/lib/server-auth";
+
+interface CheckoutItemInput {
+  productId?: string;
+  quantity?: number | string;
+}
+
+function firestoreValue(value: { stringValue?: string; integerValue?: string; doubleValue?: number } | undefined) {
+  if (!value) return undefined;
+  if (value.stringValue !== undefined) return value.stringValue;
+  if (value.integerValue !== undefined) return Number(value.integerValue);
+  return value.doubleValue;
+}
 
 export async function POST(request: Request) {
   try {
+    await verifyFirebaseBearerToken(request);
     const body = await request.json();
-    const { items, address } = body;
+    const { items } = body as { items?: CheckoutItemInput[] };
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "Cart is empty" }, { status: 400 });
     }
 
-    // Backend price recalculation
-    const subtotal = items.reduce((sum: number, item: any) => {
-      const price = Number(item.price) || 0;
-      const qty = Number(item.quantity) || 1;
-      return sum + price * qty;
-    }, 0);
+    const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+    if (!projectId) {
+      return NextResponse.json({ error: "Firebase product validation is not configured." }, { status: 503 });
+    }
+
+    const verifiedItems = await Promise.all(items.map(async (item) => {
+      const productId = item.productId?.trim();
+      const quantity = Number(item.quantity);
+      if (!productId || !Number.isInteger(quantity) || quantity < 1) {
+        throw new Error("Cart contains an invalid product or quantity.");
+      }
+
+      const productResponse = await fetch(
+        `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/products/${encodeURIComponent(productId)}`
+      );
+      if (!productResponse.ok) {
+        throw new Error("One or more products are no longer available.");
+      }
+      const product = await productResponse.json();
+      const fields = product.fields || {};
+      const status = firestoreValue(fields.status);
+      const stock = Number(firestoreValue(fields.stock) || 0);
+      const price = Number(firestoreValue(fields.price) || 0);
+      if (status !== "active" || stock < quantity || price < 0) {
+        throw new Error("One or more products are unavailable or out of stock.");
+      }
+      return { price, quantity };
+    }));
+
+    const subtotal = verifiedItems.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0
+    );
 
     const deliveryFee = subtotal >= 999 ? 0 : 99;
     const finalAmount = subtotal + deliveryFee;
@@ -54,18 +94,19 @@ export async function POST(request: Request) {
         keyId,
       });
     } else {
-      // Return simulated order payload when running without secret API key configured
-      const mockOrderId = `order_mock_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-      return NextResponse.json({
-        id: mockOrderId,
-        amount: amountInPaisa,
-        currency: "INR",
-        keyId: keyId || "rzp_test_mockkey",
-        isSimulated: true,
-      });
+      return NextResponse.json(
+        { error: "Razorpay is not configured. Choose another available payment method." },
+        { status: 503 }
+      );
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error creating Razorpay order:", error);
-    return NextResponse.json({ error: error.message || "Internal server error" }, { status: 500 });
+    const message = error instanceof Error ? error.message : "Internal server error";
+    const status = message.includes("Authentication") || message.includes("token")
+      ? 401
+      : message.includes("not configured")
+        ? 503
+        : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

@@ -94,6 +94,7 @@
     font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
     min-height: 100%;
     overflow-x: clip;
+    overflow-y: auto;
     color: var(--text);
     background-color: var(--background);
   }
