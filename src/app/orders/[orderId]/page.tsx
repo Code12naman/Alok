@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { getOrderById, OrderData, OrderStatus } from "@/services/orderService";
 import { ReturnExchangeActions } from "@/components/orders/return-exchange-actions";
+import { useAuth } from "@/context/AuthContext";
 
 const trackingSteps: { status: OrderStatus; label: string }[] = [
   { status: "Order Confirmed", label: "Order Confirmed" },
@@ -27,18 +28,23 @@ const trackingSteps: { status: OrderStatus; label: string }[] = [
 export default function OrderDetailsPage() {
   const params = useParams();
   const orderId = (params?.orderId as string) || "";
+  const { user, loading: authLoading } = useAuth();
 
   const [order, setOrder] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (orderId) {
-      getOrderById(orderId)
+    if (!authLoading && orderId && user) {
+      getOrderById(orderId, user.uid)
         .then(setOrder)
         .catch(console.error)
         .finally(() => setLoading(false));
+    } else if (!authLoading && !user) {
+      // Authentication has settled; no customer order lookup is allowed.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLoading(false);
     }
-  }, [orderId]);
+  }, [authLoading, orderId, user]);
 
   // Determine current active step index in timeline
   const getStepIndex = (currentStatus: OrderStatus) => {
@@ -46,7 +52,7 @@ export default function OrderDetailsPage() {
     return idx >= 0 ? idx : 0;
   };
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="h-8 w-8 border-2 border-[#F4512C] border-t-transparent rounded-full animate-spin" />

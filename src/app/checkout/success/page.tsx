@@ -8,22 +8,28 @@ import { CheckCircle2, Truck, ShoppingBag, MapPin, CreditCard } from "lucide-rea
 import { getOrderById, OrderData } from "@/services/orderService";
 import { SafeImage } from "@/components/ui/SafeImage";
 import { ReturnExchangeActions } from "@/components/orders/return-exchange-actions";
+import { useAuth } from "@/context/AuthContext";
 
 function CheckoutSuccessContent() {
   const searchParams = useSearchParams();
   const orderId = searchParams?.get("orderId") || "";
+  const { user, loading: authLoading } = useAuth();
 
   const [order, setOrder] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(Boolean(orderId));
 
   useEffect(() => {
-    if (orderId) {
-      getOrderById(orderId)
+    if (!authLoading && orderId && user) {
+      getOrderById(orderId, user.uid)
         .then((data) => setOrder(data))
         .catch(console.error)
         .finally(() => setLoading(false));
+    } else if (!authLoading && !user) {
+      // Authentication has settled; no customer order lookup is allowed.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLoading(false);
     }
-  }, [orderId]);
+  }, [authLoading, orderId, user]);
 
   return (
     <div className="min-h-screen bg-[#F7F7F5] py-12 md:py-16">
@@ -53,7 +59,7 @@ function CheckoutSuccessContent() {
             </div>
           </div>
 
-          {loading ? (
+          {authLoading || loading ? (
             <div className="h-40 bg-[#F7F7F5] rounded-2xl animate-pulse" />
           ) : order ? (
             <div className="space-y-6">

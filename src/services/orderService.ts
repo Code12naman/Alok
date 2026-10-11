@@ -688,9 +688,21 @@ export const getUserOrders = async (userId: string): Promise<NormalizedOrder[]> 
 /**
  * Fetches an order by its unique readable orderId or Firestore document id.
  */
-export const getOrderById = async (orderId: string): Promise<NormalizedOrder | null> => {
+export const getOrderById = async (orderId: string, ownerUserId?: string): Promise<NormalizedOrder | null> => {
   try {
-    // 1. Query by orderId field
+    if (ownerUserId) {
+      const ownedOrders = await getDocs(
+        query(collection(db, "orders"), where("userId", "==", ownerUserId))
+      );
+      const ownedOrder = ownedOrders.docs.find((candidate) => {
+        const data = candidate.data();
+        return data.orderId === orderId || data.orderNumber === orderId || candidate.id === orderId;
+      });
+      return ownedOrder ? normalizeOrder({ id: ownedOrder.id, ...ownedOrder.data() }) : null;
+    }
+
+    // Customer queries must include ownership so Firestore rules can authorize
+    // the query without exposing whether another user's order exists.
     const q = query(collection(db, "orders"), where("orderId", "==", orderId));
     const snap = await getDocs(q);
     if (!snap.empty) {
