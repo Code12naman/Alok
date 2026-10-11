@@ -10,7 +10,7 @@ export function Footer() {
   if (pathname?.startsWith("/admin")) return null;
 
   return (
-    <footer className="bg-black text-white pt-16 pb-8 border-t border-[#E6E6E3]">
+    <footer className="bg-[#111111] text-white pt-16 pb-8 border-t border-[#E6E6E3]">
       <div className="mx-auto max-w-[1440px] px-4 md:px-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 mb-16">
           {/* Brand Column */}
@@ -61,7 +61,7 @@ export function Footer() {
             <ul className="space-y-2.5 text-xs text-gray-400">
               <li><Link href="/contact" className="hover:text-[#F4512C] transition-colors">Contact Us</Link></li>
               <li><Link href="#" className="hover:text-[#F4512C] transition-colors">Shipping Information</Link></li>
-              <li><Link href="#" className="hover:text-[#F4512C] transition-colors">Returns & Exchanges</Link></li>
+              <li><Link href="/return-policy" className="hover:text-[#F4512C] transition-colors">Return & Exchange Policy</Link></li>
               <li><Link href="#" className="hover:text-[#F4512C] transition-colors">FAQs</Link></li>
             </ul>
           </div>

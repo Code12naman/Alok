@@ -116,6 +116,10 @@ export function ProductReviewsSection({
 
   // Handle Image Upload to Cloudinary
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!user) {
+      setErrorMsg("Please sign in before uploading review images.");
+      return;
+    }
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -134,7 +138,8 @@ export function ProductReviewsSection({
         if (file.size > 5 * 1024 * 1024) {
           throw new Error(`File ${file.name} exceeds maximum size limit of 5MB.`);
         }
-        const res = await uploadToCloudinary(file, "street-mode/reviews");
+        const idToken = await user.getIdToken();
+        const res = await uploadToCloudinary(file, idToken, undefined, "street-mode/reviews");
         newUrls.push(res.url);
       }
       setImages((prev) => [...prev, ...newUrls]);

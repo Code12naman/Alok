@@ -4,11 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { ShoppingBag, ArrowRight, ChevronRight, Clock, MapPin, Truck } from "lucide-react";
-import Image from "next/image";
+import { ShoppingBag, ArrowRight, ChevronRight } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { getUserOrders, OrderData } from "@/services/orderService";
 import { SafeImage } from "@/components/ui/SafeImage";
+import { ReturnExchangeActions } from "@/components/orders/return-exchange-actions";
 
 export default function MyOrdersPage() {
   const { user, loading: authLoading } = useAuth();
@@ -97,7 +97,9 @@ export default function MyOrdersPage() {
                       Order #{order.orderId}
                     </span>
                     <span className="text-gray-400 text-[11px]">
-                      Placed on {new Date(order.createdAt?.seconds ? order.createdAt.seconds * 1000 : Date.now()).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                      Placed on {order.createdAt
+                        ? new Date(order.createdAt?.seconds ? order.createdAt.seconds * 1000 : order.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                        : "Date unavailable"}
                     </span>
                   </div>
 
@@ -150,6 +152,9 @@ export default function MyOrdersPage() {
                   >
                     View Details & Track <ChevronRight className="h-4 w-4" />
                   </Link>
+                </div>
+                <div className="border-t border-[#E6E6E3] pt-4">
+                  <ReturnExchangeActions order={order} />
                 </div>
               </motion.div>
             ))}

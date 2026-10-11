@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { Search, Heart, ShoppingBag, User, X, Menu, ChevronDown } from "lucide-react";
+import { Search, Heart, ShoppingBag, User, X, Menu, ChevronDown, Sun, Moon } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/context/WishlistContext";
 import { useAuth } from "@/context/AuthContext";
 import { CartDrawer } from "./cart-drawer";
 import { SearchOverlay } from "./search-overlay";
+import { useTheme } from "@/context/ThemeContext";
 
 const navLinks = [
   { name: "Home", href: "/" },
@@ -42,6 +43,8 @@ export function Navbar() {
   const { cartCount } = useCart();
   const { wishlistCount } = useWishlist();
   const { user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
+  const themeLabel = theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
 
   useEffect(() => {
     const handleScroll = () => setIsScrolled(window.scrollY > 20);
@@ -59,7 +62,8 @@ export function Navbar() {
 
   // Close mobile menu on route change
   useEffect(() => {
-    setMobileMenuOpen(false);
+    const closeMenu = window.setTimeout(() => setMobileMenuOpen(false), 0);
+    return () => window.clearTimeout(closeMenu);
   }, [pathname]);
 
   if (pathname?.startsWith("/admin")) return null;
@@ -67,7 +71,7 @@ export function Navbar() {
   return (
     <>
       <header
-        className={`sticky top-0 z-40 bg-white transition-shadow duration-300 border-b border-[#E6E6E3] ${
+        className={`sticky top-0 z-40 bg-background transition-shadow duration-300 border-b border-[#E6E6E3] ${
           isScrolled ? "shadow-sm" : ""
         }`}
       >
@@ -146,6 +150,14 @@ export function Navbar() {
 
           {/* ── Right: Action Icons ── */}
           <div className="flex items-center gap-1 sm:gap-3">
+            <button
+              onClick={toggleTheme}
+              aria-label={themeLabel}
+              title={themeLabel}
+              className="p-2 text-gray-700 hover:text-[#F4512C] transition-colors rounded-full hover:bg-gray-100"
+            >
+              {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </button>
             {/* Search button */}
             <button
               onClick={() => setSearchOpen(true)}
@@ -244,6 +256,7 @@ export function Navbar() {
                     >
                       {link.name}
                     </Link>
+
                     {link.dropdown && (
                       <div className="pl-4 space-y-2 mt-1 border-l-2 border-gray-100">
                         {link.dropdown.map((sub) => (
@@ -262,6 +275,16 @@ export function Navbar() {
                 ))}
 
                 <hr className="border-[#E6E6E3] my-4" />
+
+                <button
+                  type="button"
+                  onClick={toggleTheme}
+                  aria-label={themeLabel}
+                  className="flex items-center gap-2 py-2 text-gray-800 hover:text-[#F4512C]"
+                >
+                  {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                  {theme === "dark" ? "Light Mode" : "Dark Mode"}
+                </button>
 
                 <Link
                   href="/wishlist"

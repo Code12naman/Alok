@@ -15,9 +15,9 @@ function firestoreValue(value: { stringValue?: string; integerValue?: string; do
 
 export async function POST(request: Request) {
   try {
-    await verifyFirebaseBearerToken(request);
+    const uid = await verifyFirebaseBearerToken(request);
     const body = await request.json();
-    const { items } = body as { items?: CheckoutItemInput[] };
+    const { items, checkoutAttemptId } = body as { items?: CheckoutItemInput[]; checkoutAttemptId?: string };
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "Cart is empty" }, { status: 400 });
@@ -28,12 +28,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Firebase product validation is not configured." }, { status: 503 });
     }
 
-    const verifiedItems = await Promise.all(items.map(async (item) => {
+    const aggregatedItems = new Map<string, { productId: string; quantity: number }>();
+    for (const item of items) {
       const productId = item.productId?.trim();
       const quantity = Number(item.quantity);
       if (!productId || !Number.isInteger(quantity) || quantity < 1) {
         throw new Error("Cart contains an invalid product or quantity.");
       }
+      const existing = aggregatedItems.get(productId);
+      if (existing) existing.quantity += quantity;
+      else aggregatedItems.set(productId, { productId, quantity });
+    }
+
+    const verifiedItems = await Promise.all([...aggregatedItems.values()].map(async (item) => {
+      const productId = item.productId?.trim();
+      const quantity = Number(item.quantity);
 
       const productResponse = await fetch(
         `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/products/${encodeURIComponent(productId)}`
@@ -76,7 +85,11 @@ export async function POST(request: Request) {
         body: JSON.stringify({
           amount: amountInPaisa,
           currency: "INR",
-          receipt: `receipt_${Date.now()}`,
+          receipt: `ct_${uid.slice(0, 16)}_${typeof checkoutAttemptId === "string" ? checkoutAttemptId.slice(-16) : Date.now()}`,
+          notes: {
+            userId: uid,
+            checkoutAttemptId: typeof checkoutAttemptId === "string" ? checkoutAttemptId : "",
+          },
         }),
       });
 

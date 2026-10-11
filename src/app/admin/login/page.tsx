@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { app, auth, db } from "@/firebase/config";
+import { auth, db } from "@/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { FiEye, FiEyeOff, FiLock, FiMail } from "react-icons/fi";
@@ -22,29 +22,16 @@ export default function AdminLogin() {
     setLoading(true);
     setError("");
 
-    console.log("LOGIN START");
-    console.log("Firebase projectId:", app.options.projectId);
-
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      console.log("LOGIN SUCCESS");
-      console.log("AUTH UID:", userCredential.user.uid);
-      console.log("AUTH EMAIL:", userCredential.user.email);
-      console.log("auth.currentUser:", auth.currentUser?.uid);
-
       const uid = userCredential.user.uid;
       const userRef = doc(db, "users", uid);
-      console.log("READING ADMIN ROLE FOR UID:", uid, "AT PATH:", userRef.path);
 
       let snapshot;
       try {
         snapshot = await getDoc(userRef);
-        console.log("USER DOC EXISTS:", snapshot.exists());
-        console.log("USER DATA:", snapshot.data());
       } catch (firestoreErr: any) {
         console.error("ROLE READ ERROR:", firestoreErr);
-        console.error("Firebase error code:", firestoreErr?.code);
-        console.error("Firebase error message:", firestoreErr?.message);
 
         // Do NOT show "Unauthorized admin account" for Condition B (Firestore permission/read error)
         setError(`Unable to verify admin role due to a Firestore error: ${firestoreErr?.message || firestoreErr?.code || "Permission denied"}`);
@@ -52,7 +39,7 @@ export default function AdminLogin() {
       }
 
       if (!snapshot.exists()) {
-        console.error("ROLE READ ERROR: User document does not exist in Firestore for UID:", uid);
+        console.error("ROLE READ ERROR: Admin profile document does not exist.");
         await auth.signOut();
         setError(`Admin profile document missing in Firestore (users/${uid}).`);
         return;
@@ -62,7 +49,7 @@ export default function AdminLogin() {
       const role = data?.role;
 
       if (role !== "admin") {
-        console.warn(`USER ROLE IS '${role}', NOT 'admin'. ACCESS DENIED.`);
+        console.warn("USER ROLE IS NOT ADMIN. ACCESS DENIED.");
         await auth.signOut();
         setError("Unauthorized admin account. You do not have permission to access the admin portal.");
       } else {

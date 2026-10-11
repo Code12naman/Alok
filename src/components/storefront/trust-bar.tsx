@@ -33,14 +33,14 @@ export function TrustBar() {
             return (
               <div
                 key={i}
-                className="flex items-center gap-3.5 p-3 rounded-2xl bg-[#F7F7F5]/60 border border-[#E6E6E3]/60 transition-all hover:bg-white hover:shadow-sm"
+                className="trust-card flex items-center gap-3.5 p-3 rounded-2xl bg-[#F7F7F5]/60 border border-[#E6E6E3]/60 transition-all hover:bg-white hover:shadow-sm"
               >
-                <div className="h-10 w-10 rounded-xl bg-white border border-[#E6E6E3] flex items-center justify-center text-[#F4512C] shadow-2xs flex-shrink-0">
+                <div className="trust-icon h-10 w-10 rounded-xl bg-white border border-[#E6E6E3] flex items-center justify-center text-[#F4512C] shadow-2xs flex-shrink-0">
                   <Icon className="h-5 w-5" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-xs text-[#111111] leading-snug">{item.title}</h4>
-                  <p className="text-[11px] text-gray-500 font-medium">{item.subtitle}</p>
+                  <h4 className="trust-title font-bold text-xs text-[#111111] leading-snug">{item.title}</h4>
+                  <p className="trust-subtitle text-[11px] text-gray-500 font-medium">{item.subtitle}</p>
                 </div>
               </div>
             );

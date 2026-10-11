@@ -55,7 +55,6 @@ export function itemKey(item: Pick<CartItem, "productId" | "size" | "color">) {
   return `${item.productId}__${item.size ?? ""}__${item.color ?? ""}`;
 }
 
-// ✅ Fixed merge: only merge unique items, no quantity addition
 export function mergeCartItems(localItems: CartItem[], remoteItems: CartItem[]): CartItem[] {
   const map = new Map<string, CartItem>();
 
@@ -68,7 +67,10 @@ export function mergeCartItems(localItems: CartItem[], remoteItems: CartItem[]):
   localItems.forEach(item => {
     if (!item || !item.productId) return;
     const key = itemKey(item);
-    if (!map.has(key)) {
+    const existing = map.get(key);
+    if (existing) {
+      existing.quantity += Math.max(0, Number(item.quantity) || 0);
+    } else {
       map.set(key, { ...item });
     }
   });
@@ -76,8 +78,31 @@ export function mergeCartItems(localItems: CartItem[], remoteItems: CartItem[]):
   return [...map.values()];
 }
 
+function cartItemsEqual(first: CartItem[], second: CartItem[]): boolean {
+  const firstByKey = new Map<string, number>();
+  const secondByKey = new Map<string, number>();
+
+  for (const item of first) {
+    if (!item?.productId) continue;
+    const key = itemKey(item);
+    firstByKey.set(key, (firstByKey.get(key) || 0) + (Number(item.quantity) || 0));
+  }
+
+  for (const item of second) {
+    if (!item?.productId) continue;
+    const key = itemKey(item);
+    secondByKey.set(key, (secondByKey.get(key) || 0) + (Number(item.quantity) || 0));
+  }
+
+  if (firstByKey.size !== secondByKey.size) return false;
+  for (const [key, quantity] of firstByKey) {
+    if (secondByKey.get(key) !== quantity) return false;
+  }
+  return true;
+}
+
 // 🔒 Sanitize items before saving to Firestore
-function sanitizeItems(items: CartItem[]): Record<string, any>[] {
+function sanitizeItems(items: CartItem[]): Record<string, unknown>[] {
   return items.map(i => ({
     ...i,
     size: i.size ?? null,
@@ -151,11 +176,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const isHydratedRef = useRef(false);
   const prevUidRef = useRef<string | null>(null);
+  const itemsRef = useRef(state.items);
+  const [localHydrated, setLocalHydrated] = useState(false);
 
   const showToast = (msg: string = "Added to cart ✓") => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
+
+  useEffect(() => {
+    itemsRef.current = state.items;
+  }, [state.items]);
 
   // 1. Local Storage Hydration
   useEffect(() => {
@@ -167,12 +198,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
           dispatch({ type: "HYDRATE", payload: parsed });
         }
       }
-    } catch {}
-    if (!user) isHydratedRef.current = true;
+    } catch (error) {
+      console.warn("CartContext: Failed to restore local cart:", error);
+    } finally {
+      setLocalHydrated(true);
+    }
   }, []);
 
   // 2. Firestore Sync
   useEffect(() => {
+    if (!localHydrated) return;
+
     const currentUid = user?.uid || null;
     if (!currentUid) {
       prevUidRef.current = null;
@@ -183,20 +219,27 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
     prevUidRef.current = currentUid;
     isHydratedRef.current = false;
+    let cancelled = false;
 
     const syncWithFirestore = async () => {
       try {
         const cartRef = doc(db, "users", currentUid, "cart", "default");
         const snap = await getDoc(cartRef);
 
-        let finalItems: CartItem[] = [];
+        const localItems = itemsRef.current;
+        let finalItems: CartItem[];
         if (snap.exists()) {
           const remoteItems = (snap.data().items as CartItem[]) || [];
-          finalItems = mergeCartItems(state.items, remoteItems);
+          // A refresh restores the same cart locally and remotely. Merging those
+          // snapshots would incorrectly count every existing item twice.
+          finalItems = cartItemsEqual(localItems, remoteItems)
+            ? remoteItems
+            : mergeCartItems(localItems, remoteItems);
         } else {
-          finalItems = state.items;
+          finalItems = localItems;
         }
 
+        if (cancelled) return;
         dispatch({ type: "HYDRATE", payload: finalItems });
 
         if (finalItems.length > 0) {
@@ -205,23 +248,32 @@ export function CartProvider({ children }: { children: ReactNode }) {
             updatedAt: new Date(),
           }, { merge: true });
         }
-      } catch (e: any) {
-        console.warn("CartContext: Firestore sync failed:", e?.message || e);
+      } catch (error) {
+        if (!cancelled) {
+          console.warn("CartContext: Firestore sync failed:", error);
+        }
       } finally {
-        isHydratedRef.current = true;
+        if (!cancelled) isHydratedRef.current = true;
       }
     };
 
     syncWithFirestore();
-  }, [user]);
+    return () => {
+      cancelled = true;
+    };
+  }, [localHydrated, user?.uid]);
 
   // 3. Persist Updates
   useEffect(() => {
+    if (!localHydrated) return;
+
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state.items));
-    } catch {}
+    } catch (error) {
+      console.warn("CartContext: Failed saving local cart:", error);
+    }
 
-    if (!user || !user.uid || !isHydratedRef.current) return;
+    if (!user?.uid || !isHydratedRef.current) return;
 
     const saveToDb = async () => {
       try {
@@ -230,13 +282,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
           items: sanitizeItems(state.items),
           updatedAt: new Date(),
         }, { merge: true });
-      } catch (e: any) {
-        console.warn("CartContext: Failed saving cart:", e?.message || e);
+      } catch (error) {
+        console.warn("CartContext: Failed saving cart:", error);
       }
     };
 
     saveToDb();
-  }, [state.items, user]);
+  }, [localHydrated, state.items, user?.uid]);
 
   const cartCount = state.items.reduce((sum, i) => sum + (i.quantity || 0), 0);
   const cartTotal = state.items.reduce((sum, i) => sum + (i.price || 0) * (i.quantity || 0), 0);

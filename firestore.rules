@@ -18,6 +18,18 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    function isCodPaymentConfirmation() {
+      return isAdmin()
+        && resource.data.paymentMethod == "COD"
+        && resource.data.paymentStatus == "Pending"
+        && request.resource.data.paymentMethod == "COD"
+        && request.resource.data.paymentStatus == "Paid"
+        && request.resource.data.paymentConfirmedBy == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'paymentStatus', 'paymentConfirmedAt', 'paymentConfirmedBy', 'updatedAt'
+        ]);
+    }
+
     // Products: Anyone can read active/published products
     match /products/{productId} {
       allow read: if true;
@@ -49,9 +61,14 @@ service cloud.firestore {
       allow read: if isOwner(userId) || isAdmin();
       allow create: if isAuthenticated()
                     && isOwner(userId)
-                    && (!request.resource.data.keys().hasAll(['role']) || request.resource.data.role != 'admin' || isAdmin());
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.role in ['customer', 'admin']
+                    && (request.resource.data.role != 'admin' || isAdmin());
       allow update: if isAdmin()
-                    || (isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])));
+                    || (isOwner(userId)
+                      && request.resource.data.uid == resource.data.uid
+                      && request.resource.data.customerId == resource.data.customerId
+                      && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['uid', 'role', 'customerId']));
       allow delete: if isAdmin();
 
       // Subcollections under users (cart, addresses, wishlist, etc.)
@@ -77,8 +94,16 @@ service cloud.firestore {
     // - Admin can read/write all orders
     match /orders/{orderId} {
       allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAdmin();
+      allow create: if isAuthenticated()
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.customerId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.customerId
+                    && request.resource.data.orderId == orderId
+                    && request.resource.data.paymentStatus in ['Pending', 'Paid']
+                    && request.resource.data.paymentMethod in ['COD', 'Razorpay'];
+      allow update: if isAdmin() && (isCodPaymentConfirmation() || !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'paymentStatus', 'paymentConfirmedAt', 'paymentConfirmedBy'
+      ]));
+      allow delete: if isAdmin();
     }
 
     // Coupons: Anyone can read active coupons, only admin can manage
@@ -88,4 +113,3 @@ service cloud.firestore {
     }
   }
 }
-

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   getOrderById,
   updateOrderStatus,
@@ -15,7 +14,6 @@ import {
   FiLoader,
   FiUser,
   FiPhone,
-  FiMail,
   FiMapPin,
   FiCopy,
   FiCheck,
@@ -25,6 +23,8 @@ import {
   FiChevronDown,
   FiAlertCircle,
 } from "react-icons/fi";
+import { useAuth } from "@/context/AuthContext";
+import { markCodPaymentAsPaid } from "@/services/orderService";
 
 const STATUSES: OrderStatus[] = [
   "Pending",
@@ -56,23 +56,27 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
   const [updating, setUpdating] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
-
-  const router = useRouter();
-
-  const loadOrder = async () => {
-    setLoading(true);
-    try {
-      const data = await getOrderById(orderIdParam);
-      setOrder(data);
-    } catch (err) {
-      console.error("[OrderDetails] Error loading order:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [confirmCodOpen, setConfirmCodOpen] = useState(false);
+  const [codUpdating, setCodUpdating] = useState(false);
+  const [codError, setCodError] = useState<string | null>(null);
+  const { user, role } = useAuth();
 
   useEffect(() => {
-    loadOrder();
+    let active = true;
+    getOrderById(orderIdParam)
+      .then((data) => {
+        if (active) setOrder(data);
+      })
+      .catch((err) => {
+        console.error("[OrderDetails] Error loading order:", err);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, [orderIdParam]);
 
   const handleStatusChange = async (newStatus: OrderStatus) => {
@@ -87,6 +91,24 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
       alert("Failed to update status.");
     } finally {
       setUpdating(false);
+    }
+  };
+
+  const handleMarkCodPaid = async () => {
+    if (!order || !user?.uid || role !== "admin" || codUpdating) return;
+
+    setCodUpdating(true);
+    setCodError(null);
+    try {
+      await markCodPaymentAsPaid(order.id, user.uid);
+      setOrder((prev) => (prev ? { ...prev, paymentStatus: "Paid" } : null));
+      setConfirmCodOpen(false);
+      showToast("COD payment marked as paid.");
+    } catch (error) {
+      console.error("[OrderDetails] Failed to confirm COD payment:", error);
+      setCodError(error instanceof Error ? error.message : "Failed to confirm COD payment.");
+    } finally {
+      setCodUpdating(false);
     }
   };
 
@@ -291,6 +313,19 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
                 <span className="inline-block bg-white/10 text-white/80 px-2 py-0.5 rounded text-[10px] font-bold">
                   Status: {order.paymentStatus}
                 </span>
+                {order.paymentMethod === "COD" && order.paymentStatus === "Pending" && role === "admin" && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCodError(null);
+                      setConfirmCodOpen(true);
+                    }}
+                    disabled={codUpdating}
+                    className="mt-2 w-full rounded-lg bg-[#ff6500] px-3 py-2 text-[11px] font-bold text-white transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Mark as Paid
+                  </button>
+                )}
               </div>
 
               {(order.razorpayOrderId || order.razorpayPaymentId) && (
@@ -439,6 +474,44 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
           </div>
         </div>
       </div>
+
+      {confirmCodOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-labelledby="cod-confirmation-title">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#141414] p-6 shadow-2xl">
+            <h2 id="cod-confirmation-title" className="text-lg font-extrabold text-white">
+              Confirm cash received
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-white/70">
+              Mark this COD payment as paid only after the cash has been physically received from the customer. This will not change the delivery status.
+            </p>
+            {codError && (
+              <p role="alert" className="mt-4 rounded-lg border border-red-400/30 bg-red-400/10 p-3 text-xs leading-5 text-red-300">
+                {codError}
+              </p>
+            )}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!codUpdating) setConfirmCodOpen(false);
+                }}
+                disabled={codUpdating}
+                className="rounded-xl border border-white/15 px-4 py-2.5 text-xs font-bold text-white/70 hover:bg-white/5 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleMarkCodPaid}
+                disabled={codUpdating}
+                className="rounded-xl bg-[#ff6500] px-4 py-2.5 text-xs font-bold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {codUpdating ? "Updating..." : "Confirm payment received"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

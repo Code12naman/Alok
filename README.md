@@ -34,3 +34,9 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## WhatsApp support configuration
+
+Before deploying, set `NEXT_PUBLIC_WHATSAPP_NUMBER` in `Alok/.env.local` for local development and in the deployment platform's project environment variables for production. The value must contain only international-format digits, including the country code, without a leading `+`, spaces, or hyphens (for example, `919876543210`). This is a public business contact number, not a private credential. WhatsApp actions remain disabled with a configuration message until a valid 8-15 digit value is provided.
+
+The return and exchange page intentionally leaves the request window, shipping responsibility, refund timing, and exchange rules identified as configurable terms. Confirm those business policies before publishing final customer-facing terms.

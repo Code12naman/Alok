@@ -56,7 +56,7 @@ export function HeroSection() {
       <div
         className="absolute bottom-0 inset-x-0 h-16 z-10 pointer-events-none"
         style={{
-          background: "linear-gradient(to top, rgba(247,247,245,1) 0%, rgba(247,247,245,0) 100%)",
+          background: "linear-gradient(to top, var(--hero-fade-target) 0%, color-mix(in srgb, var(--hero-fade-target) 0%, transparent) 100%)",
         }}
       />
 

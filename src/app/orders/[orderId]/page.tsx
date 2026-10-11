@@ -5,20 +5,16 @@ import { SafeImage } from "@/components/ui/SafeImage";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { motion } from "framer-motion";
 import {
-  CheckCircle2,
   Package,
-  Truck,
   MapPin,
   CreditCard,
   ShoppingBag,
-  Clock,
   ArrowLeft,
   Check,
 } from "lucide-react";
-import Image from "next/image";
 import { getOrderById, OrderData, OrderStatus } from "@/services/orderService";
+import { ReturnExchangeActions } from "@/components/orders/return-exchange-actions";
 
 const trackingSteps: { status: OrderStatus; label: string }[] = [
   { status: "Order Confirmed", label: "Order Confirmed" },
@@ -52,7 +48,7 @@ export default function OrderDetailsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F7F7F5] flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="h-8 w-8 border-2 border-[#F4512C] border-t-transparent rounded-full animate-spin" />
       </div>
     );
@@ -60,13 +56,13 @@ export default function OrderDetailsPage() {
 
   if (!order) {
     return (
-      <div className="min-h-screen bg-[#F7F7F5] flex items-center justify-center px-4 py-16">
-        <div className="bg-white border border-[#E6E6E3] rounded-3xl p-10 text-center max-w-md w-full shadow-xs space-y-4">
+      <div className="min-h-screen bg-background flex items-center justify-center px-4 py-16">
+        <div className="bg-card border border-border rounded-3xl p-10 text-center max-w-md w-full shadow-xs space-y-4">
           <div className="h-16 w-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto">
             <Package className="h-8 w-8" />
           </div>
-          <h2 className="text-xl font-bold text-[#111111]">Order Not Found</h2>
-          <p className="text-xs text-gray-500">
+          <h2 className="text-xl font-bold text-card-foreground">Order Not Found</h2>
+          <p className="text-xs text-muted-foreground">
             We couldn&apos;t locate order #{orderId}. Please check your order ID and try again.
           </p>
           <Link
@@ -83,7 +79,7 @@ export default function OrderDetailsPage() {
   const currentStepIdx = getStepIndex(order.orderStatus);
 
   return (
-    <div className="min-h-screen bg-[#F7F7F5] py-10 md:py-16">
+    <div className="min-h-screen bg-background py-10 md:py-16">
       <div className="mx-auto max-w-4xl px-4 md:px-8 space-y-8">
         
         {/* Header Navigation */}
@@ -95,24 +91,24 @@ export default function OrderDetailsPage() {
             >
               <ArrowLeft className="h-3.5 w-3.5" /> Back to Orders
             </Link>
-            <h1 className="font-extrabold text-2xl md:text-3xl text-[#111111] tracking-tight">
+            <h1 className="font-extrabold text-2xl md:text-3xl text-foreground tracking-tight">
               Order Details
             </h1>
-            <p className="text-xs text-gray-500 font-medium">
+            <p className="text-xs text-muted-foreground font-medium">
               Order ID: <strong className="text-[#F4512C]">#{order.orderId}</strong>
             </p>
           </div>
 
           <div className="text-right">
-            <span className="bg-[#111111] text-white text-xs font-bold px-3 py-1 rounded-full inline-block">
+            <span className="bg-foreground text-background text-xs font-bold px-3 py-1 rounded-full inline-block">
               {order.orderStatus}
             </span>
           </div>
         </div>
 
         {/* ── VISUAL TRACKING TIMELINE ── */}
-        <div className="bg-white border border-[#E6E6E3] rounded-3xl p-6 md:p-8 shadow-xs space-y-6">
-          <h2 className="font-extrabold text-base text-[#111111]">Shipment Tracking</h2>
+        <div className="bg-card border border-border rounded-3xl p-6 md:p-8 shadow-xs space-y-6">
+          <h2 className="font-extrabold text-base text-card-foreground">Shipment Tracking</h2>
 
           <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6 md:gap-2 pt-2">
             {trackingSteps.map((step, idx) => {
@@ -128,7 +124,7 @@ export default function OrderDetailsPage() {
                     className={`h-10 w-10 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                       isCompleted
                         ? "bg-[#F4512C] text-white ring-4 ring-[#FFF3F0]"
-                        : "bg-gray-200 text-gray-400"
+                        : "bg-secondary text-muted-foreground"
                     }`}
                   >
                     {isCompleted ? <Check className="h-5 w-5" /> : idx + 1}
@@ -140,14 +136,14 @@ export default function OrderDetailsPage() {
                         isCurrent
                           ? "text-[#F4512C]"
                           : isCompleted
-                          ? "text-[#111111]"
-                          : "text-gray-400"
+                          ? "text-card-foreground"
+                          : "text-muted-foreground"
                       }`}
                     >
                       {step.label}
                     </span>
                     {isCurrent && (
-                      <span className="text-[10px] text-gray-400 font-medium block">In Progress</span>
+                      <span className="text-[10px] text-muted-foreground font-medium block">In Progress</span>
                     )}
                   </div>
                 </div>
@@ -160,83 +156,86 @@ export default function OrderDetailsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* Purchased Items List (7 cols) */}
-          <div className="lg:col-span-7 bg-white border border-[#E6E6E3] rounded-3xl p-6 shadow-xs space-y-4">
-            <h3 className="font-bold text-sm text-[#111111] uppercase tracking-wider">
+          <div className="lg:col-span-7 bg-card border border-border rounded-3xl p-6 shadow-xs space-y-4">
+            <h3 className="font-bold text-sm text-card-foreground uppercase tracking-wider">
               Order Items ({order.items.length})
             </h3>
 
             <div className="space-y-3">
               {order.items.map((item, idx) => (
-                <div key={idx} className="flex items-center gap-3 bg-[#F7F7F5] p-3 rounded-2xl border border-[#E6E6E3]">
-                  <div className="relative h-16 w-16 rounded-xl overflow-hidden bg-white flex-shrink-0 border border-[#E6E6E3]">
+                <div key={idx} className="flex items-center gap-3 bg-secondary p-3 rounded-2xl border border-border">
+                  <div className="relative h-16 w-16 rounded-xl overflow-hidden bg-card flex-shrink-0 border border-border">
                     {item.image ? (
                       <SafeImage src={item.image} alt={item.name} fill sizes="64px" className="object-cover" />
                     ) : (
-                      <ShoppingBag className="h-6 w-6 text-gray-300 m-auto" />
+                      <ShoppingBag className="h-6 w-6 text-muted-foreground m-auto" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0 text-xs">
-                    <h4 className="font-bold text-[#111111] truncate">{item.name}</h4>
-                    <p className="text-gray-500 text-[11px]">
+                    <h4 className="font-bold text-card-foreground truncate">{item.name}</h4>
+                    <p className="text-muted-foreground text-[11px]">
                       Qty: {item.quantity} {item.size ? `| Size: ${item.size}` : ""} {item.color ? `| Color: ${item.color}` : ""}
                     </p>
                     <p className="font-extrabold text-[#F4512C] text-xs mt-1">
                       ₹{item.price.toLocaleString("en-IN")} each
                     </p>
                   </div>
-                  <span className="font-extrabold text-xs text-[#111111]">
+                  <span className="font-extrabold text-xs text-card-foreground">
                     ₹{item.subtotal.toLocaleString("en-IN")}
                   </span>
                 </div>
               ))}
+            </div>
+            <div className="border-t border-border pt-4">
+              <ReturnExchangeActions order={order} />
             </div>
           </div>
 
           {/* Delivery & Payment Details (5 cols) */}
           <div className="lg:col-span-5 space-y-4">
             {/* Delivery Address Card */}
-            <div className="bg-white border border-[#E6E6E3] rounded-3xl p-6 shadow-xs space-y-2 text-xs">
-              <div className="flex items-center gap-2 font-bold text-[#111111] mb-2">
+            <div className="bg-card border border-border rounded-3xl p-6 shadow-xs space-y-2 text-xs">
+              <div className="flex items-center gap-2 font-bold text-card-foreground mb-2">
                 <MapPin className="h-4 w-4 text-[#F4512C]" /> Delivery Address
               </div>
-              <p className="font-bold text-[#111111]">{order.deliveryAddress.fullName}</p>
-              <p className="text-gray-600">
+              <p className="font-bold text-card-foreground">{order.deliveryAddress.fullName}</p>
+              <p className="text-muted-foreground">
                 {order.deliveryAddress.building}, {order.deliveryAddress.street}
               </p>
-              <p className="text-gray-600">
+              <p className="text-muted-foreground">
                 {order.deliveryAddress.city}, {order.deliveryAddress.state} - {order.deliveryAddress.pinCode}
               </p>
-              <p className="text-gray-500 font-medium">Phone: {order.deliveryAddress.phone}</p>
+              <p className="text-muted-foreground font-medium">Phone: {order.deliveryAddress.phone}</p>
             </div>
 
             {/* Payment Summary Card */}
-            <div className="bg-white border border-[#E6E6E3] rounded-3xl p-6 shadow-xs space-y-3 text-xs">
-              <div className="flex items-center gap-2 font-bold text-[#111111] mb-2">
+            <div className="bg-card border border-border rounded-3xl p-6 shadow-xs space-y-3 text-xs">
+              <div className="flex items-center gap-2 font-bold text-card-foreground mb-2">
                 <CreditCard className="h-4 w-4 text-[#F4512C]" /> Payment Details
               </div>
 
-              <div className="flex justify-between text-gray-600">
+              <div className="flex justify-between text-muted-foreground">
                 <span>Subtotal</span>
-                <span className="font-semibold text-black">₹{order.subtotal.toLocaleString("en-IN")}</span>
+                <span className="font-semibold text-card-foreground">₹{order.subtotal.toLocaleString("en-IN")}</span>
               </div>
-              <div className="flex justify-between text-gray-600">
+              <div className="flex justify-between text-muted-foreground">
                 <span>Delivery Charge</span>
                 <span className="font-semibold text-[#F4512C]">
                   {order.deliveryCharge === 0 ? "FREE" : `₹${order.deliveryCharge}`}
                 </span>
               </div>
-              <div className="flex justify-between text-gray-600">
+              <div className="flex justify-between text-muted-foreground">
                 <span>Payment Method</span>
-                <strong className="text-black">{order.paymentMethod}</strong>
+                <strong className="text-card-foreground">{order.paymentMethod}</strong>
               </div>
-              <div className="flex justify-between text-gray-600">
+              <div className="flex justify-between text-muted-foreground">
                 <span>Payment Status</span>
                 <strong className={order.paymentStatus === "Paid" ? "text-emerald-600" : "text-amber-600"}>
                   {order.paymentStatus}
                 </strong>
               </div>
 
-              <div className="flex justify-between items-center text-sm font-extrabold text-[#111111] pt-3 border-t border-[#E6E6E3]">
+              <div className="flex justify-between items-center text-sm font-extrabold text-card-foreground pt-3 border-t border-border">
                 <span>Total Amount Paid</span>
                 <span className="text-base text-[#F4512C]">₹{order.finalAmount.toLocaleString("en-IN")}</span>
               </div>

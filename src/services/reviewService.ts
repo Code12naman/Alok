@@ -64,7 +64,10 @@ export async function hasUserPurchasedProduct(
         (i: any) => i.productId === productId || i.id === productId
       );
 
-      if (found) return true;
+      const eligibleStatus =
+        orderData.paymentStatus === "Paid" ||
+        (orderData.paymentMethod === "COD" && orderData.orderStatus === "Delivered");
+      if (found && eligibleStatus && orderData.orderStatus !== "Cancelled") return true;
     }
   } catch (err) {
     console.error("[ReviewService] Error checking user purchase history:", err);
@@ -154,6 +157,9 @@ export async function addReview(
   }
   if (!reviewData.review || reviewData.review.trim().length < 10) {
     throw new Error("Review text must be at least 10 characters.");
+  }
+  if (!(await hasUserPurchasedProduct(reviewData.userId, reviewData.productId))) {
+    throw new Error("Only customers with a qualifying completed order can review this product.");
   }
 
   const payload = deepSanitizeFirestore({

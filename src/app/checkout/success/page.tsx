@@ -4,17 +4,17 @@ import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { CheckCircle2, Package, Truck, ArrowRight, ShoppingBag, MapPin, CreditCard } from "lucide-react";
-import Image from "next/image";
+import { CheckCircle2, Truck, ShoppingBag, MapPin, CreditCard } from "lucide-react";
 import { getOrderById, OrderData } from "@/services/orderService";
 import { SafeImage } from "@/components/ui/SafeImage";
+import { ReturnExchangeActions } from "@/components/orders/return-exchange-actions";
 
 function CheckoutSuccessContent() {
   const searchParams = useSearchParams();
   const orderId = searchParams?.get("orderId") || "";
 
   const [order, setOrder] = useState<OrderData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(orderId));
 
   useEffect(() => {
     if (orderId) {
@@ -22,8 +22,6 @@ function CheckoutSuccessContent() {
         .then((data) => setOrder(data))
         .catch(console.error)
         .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
     }
   }, [orderId]);
 
@@ -59,13 +57,14 @@ function CheckoutSuccessContent() {
             <div className="h-40 bg-[#F7F7F5] rounded-2xl animate-pulse" />
           ) : order ? (
             <div className="space-y-6">
+              <ReturnExchangeActions order={order} />
               {/* Estimated Delivery Banner */}
               <div className="bg-[#FFF3F0] border border-[#F4512C]/20 rounded-2xl p-4 flex items-center gap-3">
                 <Truck className="h-6 w-6 text-[#F4512C] flex-shrink-0" />
                 <div className="text-xs">
                   <span className="font-bold text-[#111111] block">Estimated Delivery Date</span>
                   <span className="text-gray-600 font-medium">
-                    Delivered by {new Date(Date.now() + 5 * 86400000).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}
+                    Delivery timing will be shared by the support team.
                   </span>
                 </div>
               </div>

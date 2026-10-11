@@ -2,7 +2,7 @@
 
 import { SafeImage } from "@/components/ui/SafeImage";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -34,7 +34,7 @@ import {
   setDefaultCustomerAddress,
   deleteCustomerAddress,
 } from "@/services/addressService";
-import { createOrder, PaymentMethod } from "@/services/orderService";
+import { createOrder, generateOrderId, PaymentMethod } from "@/services/orderService";
 import { processRazorpayPayment } from "@/services/paymentService";
 
 const inputClass =
@@ -54,6 +54,11 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Razorpay");
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>("");
+  const checkoutAttemptIdRef = useRef<string>("");
+
+  if (!checkoutAttemptIdRef.current) {
+    checkoutAttemptIdRef.current = generateOrderId();
+  }
 
   // Address Form State
   const [addrForm, setAddrForm] = useState({
@@ -203,7 +208,9 @@ export default function CheckoutPage() {
           "COD",
           "Pending",
           undefined,
-          user.email || profile.email || ""
+          user.email || profile.email || "",
+          undefined,
+          checkoutAttemptIdRef.current
         );
         clearCart();
         router.push(`/checkout/success?orderId=${createdOrder.orderId}`);
@@ -216,7 +223,7 @@ export default function CheckoutPage() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${idToken}`,
           },
-          body: JSON.stringify({ items, address: selectedAddress }),
+          body: JSON.stringify({ items, address: selectedAddress, checkoutAttemptId: checkoutAttemptIdRef.current }),
         });
 
         if (!res.ok) {
@@ -252,7 +259,11 @@ export default function CheckoutPage() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${idToken}`,
           },
-          body: JSON.stringify(rzpResponse),
+          body: JSON.stringify({
+            ...rzpResponse,
+            items,
+            checkoutAttemptId: checkoutAttemptIdRef.current,
+          }),
         });
 
         const verifyData = await verifyRes.json();
@@ -272,7 +283,9 @@ export default function CheckoutPage() {
             razorpayOrderId: rzpResponse.razorpay_order_id,
             razorpayPaymentId: rzpResponse.razorpay_payment_id,
           },
-          user.email || profile.email || ""
+          user.email || profile.email || "",
+          undefined,
+          checkoutAttemptIdRef.current
         );
 
         clearCart();

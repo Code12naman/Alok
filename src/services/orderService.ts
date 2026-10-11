@@ -3,13 +3,12 @@ import {
   doc,
   getDoc,
   getDocs,
-  addDoc,
-  setDoc,
   updateDoc,
   query,
   where,
   orderBy,
   serverTimestamp,
+  runTransaction,
 } from "firebase/firestore";
 import { db } from "@/firebase/config";
 import { CartItem } from "@/context/CartContext";
@@ -347,7 +346,8 @@ export const createOrder = async (
   paymentStatus: PaymentStatus = "Pending",
   razorpayDetails?: { razorpayOrderId?: string; razorpayPaymentId?: string },
   userEmail?: string,
-  couponDetails?: { couponCode?: string; discount?: number }
+  couponDetails?: { couponCode?: string; discount?: number },
+  checkoutAttemptId?: string
 ): Promise<NormalizedOrder> => {
   if (!userId) {
     throw new Error("Authentication required: Order creation requires a logged-in user ID.");
@@ -370,16 +370,28 @@ export const createOrder = async (
     }
   }
 
-  const orderId = generateOrderId();
+  const orderId = checkoutAttemptId || generateOrderId();
   const email = userEmail || "";
+
+  const aggregatedItems = new Map<string, CartItem>();
+  for (const item of cartItems) {
+    if (!item?.productId || !Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1) {
+      throw new Error("The cart contains an invalid product or quantity.");
+    }
+    const key = `${item.productId}__${item.size || ""}__${item.color || ""}`;
+    const existing = aggregatedItems.get(key);
+    if (existing) {
+      existing.quantity += Number(item.quantity);
+    } else {
+      aggregatedItems.set(key, { ...item, quantity: Number(item.quantity) });
+    }
+  }
+  const normalizedCartItems = [...aggregatedItems.values()];
 
   // Re-read products before creating the immutable order snapshot. Cart prices and
   // names are client state and must not be treated as authoritative.
   const verifiedItems = await Promise.all(
-    cartItems.map(async (cartItem) => {
-      if (!cartItem.productId || cartItem.quantity < 1) {
-        throw new Error("The cart contains an invalid product or quantity.");
-      }
+    normalizedCartItems.map(async (cartItem) => {
       const productSnapshot = await getDoc(doc(db, "products", cartItem.productId));
       if (!productSnapshot.exists()) {
         throw new Error(`The product "${cartItem.name}" is no longer available.`);
@@ -469,6 +481,7 @@ export const createOrder = async (
     paymentStatus,
     orderStatus: "Order Confirmed",
     status: "Order Confirmed",
+    checkoutAttemptId: orderId,
   };
 
   if (razorpayDetails?.razorpayOrderId) {
@@ -487,28 +500,48 @@ export const createOrder = async (
     updatedAt: serverTimestamp(),
   };
 
-  console.log(`[OrderService] Creating order "${orderId}" for user (${userId}):`, finalPayload);
-
-  const docRef = await addDoc(collection(db, "orders"), finalPayload);
-  console.log(`[OrderService] Order created successfully with Firestore doc ID: ${docRef.id}`);
-
-  // 6. Decrement stock in background
-  try {
-    for (const item of cartItems) {
-      if (!item.productId) continue;
-      const productRef = doc(db, "products", item.productId);
-      const prodSnap = await getDoc(productRef);
-      if (prodSnap.exists()) {
-        const currentStock = prodSnap.data().stock || 0;
-        const newStock = Math.max(0, currentStock - item.quantity);
-        await updateDoc(productRef, { stock: newStock });
-      }
+  const docRef = doc(collection(db, "orders"), orderId);
+  const existingOrder = await getDoc(docRef);
+  if (existingOrder.exists()) {
+    const existingData = existingOrder.data();
+    if (existingData.checkoutAttemptId === orderId || existingData.razorpayOrderId === razorpayDetails?.razorpayOrderId) {
+      return normalizeOrder({ id: existingOrder.id, ...existingData });
     }
-  } catch (err) {
-    console.error("[OrderService] Failed to update product inventory stock:", err);
+    throw new Error("This order ID already exists. Please retry the checkout.");
   }
+  await runTransaction(db, async (transaction) => {
+    const existingOrder = await transaction.get(docRef);
+    if (existingOrder.exists()) {
+      throw new Error("This order ID already exists. Please retry the checkout.");
+    }
 
-  return normalizeOrder({ id: docRef.id, ...finalPayload });
+    const productSnapshots = [];
+    for (const item of normalizedCartItems) {
+      const productRef = doc(db, "products", item.productId);
+      productSnapshots.push({ item, ref: productRef, snapshot: await transaction.get(productRef) });
+    }
+
+    for (const { item, ref, snapshot } of productSnapshots) {
+      if (!snapshot.exists()) {
+        throw new Error(`The product "${item.name}" is no longer available.`);
+      }
+      const product = snapshot.data();
+      const currentPrice = Number(product.price);
+      const currentStock = Number(product.stock) || 0;
+      if (product.status !== "active" || !Number.isFinite(currentPrice) || currentStock < item.quantity) {
+        throw new Error(`"${product.name || item.name}" is out of stock or unavailable.`);
+      }
+      transaction.update(ref, { stock: currentStock - item.quantity });
+    }
+
+    transaction.set(docRef, finalPayload);
+  });
+
+  const createdSnapshot = await getDoc(docRef);
+  if (!createdSnapshot.exists()) {
+    throw new Error("Order creation could not be confirmed. Please check My Orders before retrying.");
+  }
+  return normalizeOrder({ id: createdSnapshot.id, ...createdSnapshot.data() });
 };
 
 /**
@@ -530,10 +563,85 @@ export const getOrders = async (): Promise<NormalizedOrder[]> => {
  */
 export const updateOrderStatus = async (id: string, status: OrderStatus): Promise<void> => {
   const docRef = doc(db, "orders", id);
-  await updateDoc(docRef, {
-    orderStatus: status,
-    status: status,
-    updatedAt: serverTimestamp(),
+  await runTransaction(db, async (transaction) => {
+    const orderSnapshot = await transaction.get(docRef);
+    if (!orderSnapshot.exists()) throw new Error("Order not found.");
+    const order = orderSnapshot.data();
+    const current = (order.orderStatus || order.status || "Pending") as OrderStatus;
+    const transitions: Record<string, OrderStatus[]> = {
+      Pending: ["Confirmed", "Order Confirmed", "Cancelled"],
+      Confirmed: ["Processing", "Cancelled"],
+      "Order Confirmed": ["Processing", "Cancelled"],
+      Processing: ["Shipped", "Cancelled"],
+      Shipped: ["Out for Delivery", "Cancelled"],
+      "Out for Delivery": ["Delivered"],
+      Delivered: [],
+      Cancelled: [],
+    };
+
+    if (current !== status && !transitions[current]?.includes(status)) {
+      throw new Error(`Invalid order status transition from ${current} to ${status}.`);
+    }
+
+    if (status === "Cancelled" && current !== "Cancelled" && !order.stockRestoredAt) {
+      const items = Array.isArray(order.items) ? order.items : Array.isArray(order.products) ? order.products : [];
+      const productSnapshots = [];
+      for (const item of items) {
+        if (item.productId && Number(item.quantity) > 0) {
+          const productRef = doc(db, "products", item.productId);
+          productSnapshots.push({
+            ref: productRef,
+            snapshot: await transaction.get(productRef),
+            quantity: Number(item.quantity),
+          });
+        }
+      }
+      for (const product of productSnapshots) {
+        if (product.snapshot.exists()) {
+          const stock = Number(product.snapshot.data().stock) || 0;
+          transaction.update(product.ref, { stock: stock + product.quantity });
+        }
+      }
+      transaction.update(docRef, {
+        orderStatus: status,
+        status,
+        stockRestoredAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      return;
+    }
+
+    transaction.update(docRef, {
+      orderStatus: status,
+      status,
+      updatedAt: serverTimestamp(),
+    });
+  });
+};
+
+/**
+ * Confirms cash receipt for a pending COD order. Firestore rules enforce the
+ * admin-only, COD-only, Pending -> Paid transition and audit fields.
+ */
+export const markCodPaymentAsPaid = async (id: string, adminUid: string): Promise<void> => {
+  if (!adminUid) throw new Error("Administrator authentication is required.");
+
+  await runTransaction(db, async (transaction) => {
+    const docRef = doc(db, "orders", id);
+    const snapshot = await transaction.get(docRef);
+    if (!snapshot.exists()) throw new Error("Order not found.");
+
+    const order = snapshot.data();
+    if (order.paymentMethod !== "COD" || order.paymentStatus !== "Pending") {
+      throw new Error("Only pending COD orders can be marked as paid.");
+    }
+
+    transaction.update(docRef, {
+      paymentStatus: "Paid",
+      paymentConfirmedAt: serverTimestamp(),
+      paymentConfirmedBy: adminUid,
+      updatedAt: serverTimestamp(),
+    });
   });
 };
 
