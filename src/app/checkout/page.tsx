@@ -41,6 +41,24 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
+async function readApiResponse<T>(response: Response): Promise<T> {
+  const body = await response.text();
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(
+      response.status === 404
+        ? "Checkout service is not available in this deployment. Please try again after the latest deployment is published."
+        : `Checkout service returned an unexpected response (${response.status}).`
+    );
+  }
+
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    throw new Error("Checkout service returned an invalid response. Please try again.");
+  }
+}
+
 export default function CheckoutPage() {
   const { items, cartTotal, clearCart } = useCart();
   const { user, profile, loading: authLoading } = useAuth();
@@ -222,7 +240,7 @@ export default function CheckoutPage() {
             ...details,
           }),
         });
-        const data = await response.json();
+        const data = await readApiResponse<{ error?: string; orderId?: string }>(response);
         if (!response.ok) {
           throw new Error(data.error || "Unable to create your order.");
         }
@@ -246,11 +264,15 @@ export default function CheckoutPage() {
         });
 
         if (!res.ok) {
-          const errData = await res.json();
+          const errData = await readApiResponse<{ error?: string }>(res);
           throw new Error(errData.error || "Failed to create payment order");
         }
 
-        const razorpayOrder = await res.json();
+        const razorpayOrder = await readApiResponse<{
+          id: string;
+          amount: number;
+          keyId: string;
+        }>(res);
 
         // Process Razorpay Checkout Modal
         let rzpResponse: RazorpaySuccessResponse | null = null;
@@ -288,7 +310,7 @@ export default function CheckoutPage() {
           }),
         });
 
-        const verifyData = await verifyRes.json();
+        const verifyData = await readApiResponse<{ verified?: boolean; error?: string }>(verifyRes);
         if (!verifyData.verified) {
           throw new Error(verifyData.error || "Payment signature verification failed");
         }

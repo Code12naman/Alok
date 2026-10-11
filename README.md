@@ -40,3 +40,20 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 Before deploying, set `NEXT_PUBLIC_WHATSAPP_NUMBER` in `Alok/.env.local` for local development and in the deployment platform's project environment variables for production. The value must contain only international-format digits, including the country code, without a leading `+`, spaces, or hyphens (for example, `919876543210`). This is a public business contact number, not a private credential. WhatsApp actions remain disabled with a configuration message until a valid 8-15 digit value is provided.
 
 The return and exchange page intentionally leaves the request window, shipping responsibility, refund timing, and exchange rules identified as configurable terms. Confirm those business policies before publishing final customer-facing terms.
+
+## Secure checkout server configuration
+
+Checkout order creation and stock decrementing run through the server-only
+`/api/checkout/create-order` route. Configure these server environment variables
+in local `.env.local` and in the deployment platform; never use `NEXT_PUBLIC_`
+for the private values:
+
+```text
+FIREBASE_ADMIN_PROJECT_ID=your-firebase-project-id
+FIREBASE_ADMIN_CLIENT_EMAIL=your-service-account-client-email
+FIREBASE_ADMIN_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+```
+
+The Firebase service account must have access to the project's Firestore
+database. Do not commit a service-account JSON file, private key, or these
+values. Deploy the application only after the server credentials are configured.
