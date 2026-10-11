@@ -1,13 +1,27 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { collection, getCountFromServer, query, where } from "firebase/firestore";
 import { db } from "@/firebase/config";
-import { FiBox, FiShoppingCart, FiDollarSign, FiUsers, FiClock, FiAlertTriangle, FiTrendingUp, FiPackage } from "react-icons/fi";
+import { getProducts, FirestoreProduct } from "@/services/productService";
+import { getOrders, NormalizedOrder } from "@/services/orderService";
+import {
+  FiBox,
+  FiShoppingCart,
+  FiUsers,
+  FiClock,
+  FiAlertTriangle,
+  FiTrendingUp,
+  FiPackage,
+  FiArrowRight,
+  FiLoader,
+} from "react-icons/fi";
 import { motion } from "framer-motion";
 import Link from "next/link";
-
 import { useAuth } from "@/context/AuthContext";
+
+const LOW_STOCK_THRESHOLD = 5;
+const RECENT_ORDER_LIMIT = 5;
 
 interface Stats {
   products: number;
@@ -17,49 +31,103 @@ interface Stats {
   lowStock: number;
 }
 
+function formatOrderDate(order: NormalizedOrder) {
+  return order.createdAtFormatted !== "—" ? order.createdAtFormatted : "Date unavailable";
+}
+
 export default function AdminDashboard() {
   const { user, role, loading: authLoading } = useAuth();
   const [stats, setStats] = useState<Stats>({ products: 0, orders: 0, customers: 0, pendingOrders: 0, lowStock: 0 });
+  const [lowStockProducts, setLowStockProducts] = useState<FirestoreProduct[]>([]);
+  const [recentOrders, setRecentOrders] = useState<NormalizedOrder[]>([]);
   const [statsLoading, setStatsLoading] = useState(true);
+  const [inventoryLoading, setInventoryLoading] = useState(true);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [inventoryError, setInventoryError] = useState<string | null>(null);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading || !user || role !== "admin") return;
 
-    async function fetchStats() {
+    let active = true;
+    async function fetchDashboardData() {
       setStatsLoading(true);
-      try {
-        const [products, orders, users, pendingOrders] = await Promise.allSettled([
+      setInventoryLoading(true);
+      setOrdersLoading(true);
+      setInventoryError(null);
+      setOrdersError(null);
+
+      const [countsResult, productsResult, ordersResult] = await Promise.allSettled([
+        Promise.all([
           getCountFromServer(collection(db, "products")),
           getCountFromServer(collection(db, "orders")),
           getCountFromServer(query(collection(db, "users"), where("role", "==", "customer"))),
           getCountFromServer(query(collection(db, "orders"), where("status", "==", "Pending"))),
-        ]);
+        ]),
+        getProducts(),
+        getOrders(),
+      ]);
 
-        setStats({
-          products: products.status === "fulfilled" ? products.value.data().count : 0,
-          orders: orders.status === "fulfilled" ? orders.value.data().count : 0,
-          customers: users.status === "fulfilled" ? users.value.data().count : 0,
-          pendingOrders: pendingOrders.status === "fulfilled" ? pendingOrders.value.data().count : 0,
-          lowStock: 0,
-        });
-      } catch (e) {
-        console.error("Dashboard stats error:", e);
-      } finally {
-        setStatsLoading(false);
+      if (!active) return;
+
+      if (countsResult.status === "fulfilled") {
+        const [products, orders, users, pendingOrders] = countsResult.value;
+        setStats((current) => ({
+          ...current,
+          products: products.data().count,
+          orders: orders.data().count,
+          customers: users.data().count,
+          pendingOrders: pendingOrders.data().count,
+        }));
+      } else {
+        console.error("Dashboard stats error:", countsResult.reason);
       }
+      setStatsLoading(false);
+
+      if (productsResult.status === "fulfilled") {
+        const activeProducts = productsResult.value.filter(
+          (product) => product.status === "active" && Number.isFinite(Number(product.stock))
+        );
+        const lowStock = activeProducts
+          .filter((product) => Number(product.stock) <= LOW_STOCK_THRESHOLD)
+          .sort((a, b) => Number(a.stock) - Number(b.stock));
+        setLowStockProducts(lowStock);
+        setStats((current) => ({ ...current, lowStock: lowStock.length }));
+      } else {
+        console.error("Dashboard inventory error:", productsResult.reason);
+        setInventoryError("Could not load inventory alerts. Please try again.");
+      }
+      setInventoryLoading(false);
+
+      if (ordersResult.status === "fulfilled") {
+        const sorted = [...ordersResult.value]
+          .sort((a, b) => {
+            const aSeconds = Number(a.createdAt?.seconds || 0);
+            const bSeconds = Number(b.createdAt?.seconds || 0);
+            return bSeconds - aSeconds;
+          })
+          .slice(0, RECENT_ORDER_LIMIT);
+        setRecentOrders(sorted);
+      } else {
+        console.error("Dashboard recent orders error:", ordersResult.reason);
+        setOrdersError("Could not load recent orders. Please try again.");
+      }
+      setOrdersLoading(false);
     }
-    fetchStats();
+
+    fetchDashboardData();
+    return () => {
+      active = false;
+    };
   }, [user, role, authLoading]);
 
   const isLoading = authLoading || statsLoading;
-
   const cards = [
     { title: "Total Products", value: stats.products, icon: FiBox, color: "text-blue-400", bg: "bg-blue-500/10", href: "/admin/products" },
     { title: "Total Orders", value: stats.orders, icon: FiShoppingCart, color: "text-green-400", bg: "bg-green-500/10", href: "/admin/orders" },
     { title: "Customers", value: stats.customers, icon: FiUsers, color: "text-purple-400", bg: "bg-purple-500/10", href: "/admin/customers" },
     { title: "Pending Orders", value: stats.pendingOrders, icon: FiClock, color: "text-yellow-400", bg: "bg-yellow-500/10", href: "/admin/orders" },
   ];
-
   const quickActions = [
     { label: "Add Product", href: "/admin/products/add", icon: FiBox, color: "bg-[#ff6500]" },
     { label: "View Orders", href: "/admin/orders", icon: FiShoppingCart, color: "bg-blue-600" },
@@ -69,71 +137,79 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map((card, i) => (
-          <motion.div
-            key={card.title}
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.07 }}
-          >
-            <Link href={card.href} className="block bg-[#141414] border border-white/[0.07] rounded-xl p-5 hover:border-white/15 transition-colors group">
-              <div className="flex items-start justify-between mb-4">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${card.bg}`}>
-                  <card.icon className={`w-5 h-5 ${card.color}`} />
-                </div>
-                <FiTrendingUp className="w-4 h-4 text-white/20 group-hover:text-white/40 transition-colors" />
+          <motion.div key={card.title} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.07 }}>
+            <Link href={card.href} className="group block rounded-xl border border-white/[0.07] bg-[#141414] p-5 transition-colors hover:border-white/15">
+              <div className="mb-4 flex items-start justify-between">
+                <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${card.bg}`}><card.icon className={`h-5 w-5 ${card.color}`} /></div>
+                <FiTrendingUp className="h-4 w-4 text-white/20 transition-colors group-hover:text-white/40" />
               </div>
-              <p className="text-white/50 text-xs mb-1">{card.title}</p>
-              <p className="text-3xl font-bold font-display tracking-wider">
-                {isLoading ? <span className="text-white/20">—</span> : card.value}
-              </p>
+              <p className="mb-1 text-xs text-white/50">{card.title}</p>
+              <p className="font-display text-3xl font-bold tracking-wider">{isLoading ? <span className="text-white/20">—</span> : card.value}</p>
             </Link>
           </motion.div>
         ))}
       </div>
 
-      {/* Quick Actions */}
       <div>
-        <h2 className="text-sm font-semibold text-white/50 uppercase tracking-widest mb-3">Quick Actions</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {quickActions.map((a, i) => (
-            <motion.div key={a.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + i * 0.07 }}>
-              <Link href={a.href} className={`flex items-center gap-3 ${a.color} rounded-xl p-4 hover:opacity-90 transition-opacity`}>
-                <a.icon className="w-5 h-5 text-white" />
-                <span className="text-white text-sm font-semibold">{a.label}</span>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-white/50">Quick Actions</h2>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          {quickActions.map((action, i) => (
+            <motion.div key={action.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 + i * 0.07 }}>
+              <Link href={action.href} className={`flex items-center gap-3 rounded-xl ${action.color} p-4 transition-opacity hover:opacity-90`}>
+                <action.icon className="h-5 w-5 text-white" /><span className="text-sm font-semibold text-white">{action.label}</span>
               </Link>
             </motion.div>
           ))}
         </div>
       </div>
 
-      {/* Bottom grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-[#141414] border border-white/[0.07] rounded-xl p-6">
-          <h3 className="font-semibold mb-4 flex items-center gap-2">
-            <FiAlertTriangle className="text-yellow-400 w-4 h-4" /> Low Stock Alert
-          </h3>
-          <div className="flex flex-col items-center justify-center h-32 text-white/30 text-sm">
-            Low stock alerts will appear here.<br />
-            <Link href="/admin/products" className="mt-3 text-[#ff6500] hover:underline text-xs">
-              View all products →
-            </Link>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <section className="rounded-xl border border-white/[0.07] bg-[#141414] p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h3 className="flex items-center gap-2 font-semibold"><FiAlertTriangle className="h-4 w-4 text-yellow-400" /> Low Stock Alert</h3>
+            <span className="text-[11px] text-white/40">At or below {LOW_STOCK_THRESHOLD}</span>
           </div>
-        </div>
+          {inventoryLoading ? <div className="flex h-32 items-center justify-center"><FiLoader className="h-5 w-5 animate-spin text-[#ff6500]" /></div>
+            : inventoryError ? <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-xs text-red-300">{inventoryError}</p>
+              : lowStockProducts.length === 0 ? <div className="flex h-32 flex-col items-center justify-center text-sm text-white/40">No active products need restocking.</div>
+                : <div className="space-y-2">{lowStockProducts.slice(0, 6).map((product) => <Link key={product.id} href={`/admin/products/edit/${product.id}`} className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-[#0a0a0a] p-3 transition-colors hover:border-yellow-500/40"><span className="min-w-0 truncate text-xs font-semibold text-white/90">{product.name}</span><span className="ml-3 shrink-0 text-xs font-bold text-yellow-400">{product.stock} left</span></Link>)}<Link href="/admin/products" className="inline-flex items-center gap-1 text-xs font-bold text-[#ff6500] hover:underline">View all products <FiArrowRight /></Link></div>}
+        </section>
 
-        <div className="bg-[#141414] border border-white/[0.07] rounded-xl p-6">
-          <h3 className="font-semibold mb-4 flex items-center gap-2">
-            <FiShoppingCart className="text-green-400 w-4 h-4" /> Recent Orders
-          </h3>
-          <div className="flex flex-col items-center justify-center h-32 text-white/30 text-sm">
-            Recent orders will appear here.<br />
-            <Link href="/admin/orders" className="mt-3 text-[#ff6500] hover:underline text-xs">
-              View all orders →
-            </Link>
-          </div>
-        </div>
+        <section className="rounded-xl border border-white/[0.07] bg-[#141414] p-6">
+          <div className="mb-4 flex items-center justify-between"><h3 className="flex items-center gap-2 font-semibold"><FiShoppingCart className="h-4 w-4 text-green-400" /> Recent Orders</h3><Link href="/admin/orders" className="text-xs font-bold text-[#ff6500] hover:underline">View all</Link></div>
+          {ordersLoading ? <div className="flex h-32 items-center justify-center"><FiLoader className="h-5 w-5 animate-spin text-[#ff6500]" /></div>
+            : ordersError ? <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-xs text-red-300">{ordersError}</p>
+              : recentOrders.length === 0 ? <div className="flex h-32 items-center justify-center text-sm text-white/40">No orders found.</div>
+                : <div className="space-y-2">{recentOrders.map((order) => {
+                  const customerName = order.customer.name?.trim() || "Guest Customer";
+                  const orderReference = order.orderNumber || order.orderId;
+
+                  return (
+                    <Link
+                      key={order.id}
+                      href={`/admin/orders/${order.id}`}
+                      className="block rounded-lg border border-white/[0.06] bg-[#0a0a0a] p-3 transition-colors hover:border-white/20"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-bold text-[#ff6500]">{customerName}</p>
+                          <p className="mt-1 truncate text-[10px] text-white/50">
+                            #{orderReference} · {formatOrderDate(order)}
+                          </p>
+                        </div>
+                        <div className="min-w-0 shrink-0 text-right">
+                          <p className="text-xs font-bold text-[#ff6500]">₹{order.finalAmount.toLocaleString("en-IN")}</p>
+                          <p className="mt-1 max-w-32 truncate text-[10px] text-white/50">
+                            {order.status} · {order.paymentStatus}
+                          </p>
+                        </div>
+                      </div>
+                    </Link>
+                  );
+                })}</div>}
+        </section>
       </div>
     </div>
   );
