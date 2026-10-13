@@ -13,7 +13,7 @@ import {
   ArrowLeft,
   Check,
 } from "lucide-react";
-import { getOrderById, OrderData, OrderStatus } from "@/services/orderService";
+import { getOrderById, normalizeOrderStatus, OrderData, OrderLookupError, OrderStatus } from "@/services/orderService";
 import { ReturnExchangeActions } from "@/components/orders/return-exchange-actions";
 import { useAuth } from "@/context/AuthContext";
 
@@ -32,17 +32,23 @@ export default function OrderDetailsPage() {
 
   const [order, setOrder] = useState<OrderData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [lookupError, setLookupError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!authLoading && orderId && user) {
+    if (authLoading) return;
+    if (orderId && user) {
       getOrderById(orderId, user.uid)
         .then(setOrder)
-        .catch(console.error)
+        .catch((error: unknown) => {
+          console.error("[OrderTracking] Order lookup failed:", error instanceof OrderLookupError ? error.code : "unknown");
+          setLookupError(error instanceof Error ? error.message : "Unable to load this order.");
+        })
         .finally(() => setLoading(false));
-    } else if (!authLoading && !user) {
+    } else if (!user) {
       // Authentication has settled; no customer order lookup is allowed.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
+      setLookupError("Your session is no longer active. Please sign in to view this order.");
     }
   }, [authLoading, orderId, user]);
 
@@ -60,16 +66,18 @@ export default function OrderDetailsPage() {
     );
   }
 
-  if (!order) {
+  if (lookupError || !order) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4 py-16">
         <div className="bg-card border border-border rounded-3xl p-10 text-center max-w-md w-full shadow-xs space-y-4">
           <div className="h-16 w-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto">
             <Package className="h-8 w-8" />
           </div>
-          <h2 className="text-xl font-bold text-card-foreground">Order Not Found</h2>
+          <h2 className="text-xl font-bold text-card-foreground">
+            {lookupError ? "Unable to load order" : "Order Not Found"}
+          </h2>
           <p className="text-xs text-muted-foreground">
-            We couldn&apos;t locate order #{orderId}. Please check your order ID and try again.
+            {lookupError || `We couldn't locate order #${orderId}. Please check your order ID and try again.`}
           </p>
           <Link
             href="/account/orders"
@@ -82,7 +90,8 @@ export default function OrderDetailsPage() {
     );
   }
 
-  const currentStepIdx = getStepIndex(order.orderStatus);
+  const currentStatus = normalizeOrderStatus(order.orderStatus || order.status);
+  const currentStepIdx = getStepIndex(currentStatus);
 
   return (
     <div className="min-h-screen bg-background py-10 md:py-16">
@@ -116,6 +125,11 @@ export default function OrderDetailsPage() {
         <div className="bg-card border border-border rounded-3xl p-6 md:p-8 shadow-xs space-y-6">
           <h2 className="font-extrabold text-base text-card-foreground">Shipment Tracking</h2>
 
+        {currentStatus === "Cancelled" ? (
+          <div className="rounded-2xl border border-red-300/50 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-500">
+            This order was cancelled.
+          </div>
+        ) : (
           <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6 md:gap-2 pt-2">
             {trackingSteps.map((step, idx) => {
               const isCompleted = idx <= currentStepIdx;
@@ -154,8 +168,9 @@ export default function OrderDetailsPage() {
                   </div>
                 </div>
               );
-            })}
-          </div>
+              })}
+            </div>
+          )}
         </div>
 
         {/* Itemized Receipt & Delivery Info */}

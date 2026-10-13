@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { collection, addDoc, deleteDoc, doc, getDocs, updateDoc, serverTimestamp } from "firebase/firestore";
-import { db } from "@/firebase/config";
+import { adminDb } from "@/firebase/config";
 import { FiPlus, FiTrash2, FiLoader, FiTag, FiCheck, FiX } from "react-icons/fi";
 
 interface Coupon {
@@ -26,7 +26,7 @@ export default function CouponsPage() {
 
   const load = async () => {
     setLoading(true);
-    try { const snap = await getDocs(collection(db, "coupons")); setCoupons(snap.docs.map(d => ({ id: d.id, ...d.data() } as Coupon))); }
+    try { const snap = await getDocs(collection(adminDb, "coupons")); setCoupons(snap.docs.map(d => ({ id: d.id, ...d.data() } as Coupon))); }
     catch { }
     setLoading(false);
   };
@@ -37,7 +37,7 @@ export default function CouponsPage() {
     if (!form.code.trim() || !form.value) return;
     setSaving(true);
     try {
-      await addDoc(collection(db, "coupons"), { ...form, code: form.code.toUpperCase().trim(), createdAt: serverTimestamp() });
+      await addDoc(collection(adminDb, "coupons"), { ...form, code: form.code.toUpperCase().trim(), createdAt: serverTimestamp() });
       setForm({ code: "", type: "percentage", value: 0, active: true });
       setShowForm(false);
       load();
@@ -47,13 +47,13 @@ export default function CouponsPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this coupon?")) return;
-    try { await deleteDoc(doc(db, "coupons", id)); setCoupons(prev => prev.filter(c => c.id !== id)); }
+    try { await deleteDoc(doc(adminDb, "coupons", id)); setCoupons(prev => prev.filter(c => c.id !== id)); }
     catch { alert("Failed to delete."); }
   };
 
   const toggleActive = async (coupon: Coupon) => {
     try {
-      await updateDoc(doc(db, "coupons", coupon.id!), { active: !coupon.active });
+      await updateDoc(doc(adminDb, "coupons", coupon.id!), { active: !coupon.active });
       setCoupons(prev => prev.map(c => c.id === coupon.id ? { ...c, active: !c.active } : c));
     } catch { }
   };

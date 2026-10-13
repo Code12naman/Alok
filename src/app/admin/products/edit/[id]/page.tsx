@@ -10,7 +10,7 @@ import {
   getImageUrl,
   getImagePublicId,
 } from "@/services/productService";
-import { auth } from "@/firebase/config";
+import { adminAuth, adminDb } from "@/firebase/config";
 import { getCategories, FirestoreCategory } from "@/services/categoryService";
 import {
   uploadToCloudinary,
@@ -168,7 +168,7 @@ export default function EditProductPage() {
       return;
     }
 
-    const currentUser = auth.currentUser;
+    const currentUser = adminAuth.currentUser;
     if (!currentUser) {
       console.error("[EditProduct] Firebase auth user is null");
       setToast({
@@ -255,7 +255,7 @@ export default function EditProductPage() {
         ...form,
         images: finalImages,
         thumbnail,
-      } as Partial<FirestoreProduct>);
+      } as Partial<FirestoreProduct>, adminDb);
 
       // Delete removed Cloudinary assets on successful save
       if (removedPublicIds.length > 0) {

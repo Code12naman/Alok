@@ -13,6 +13,7 @@ import {
   DocumentData,
 } from "firebase/firestore";
 import { db } from "../firebase/config";
+import type { Firestore } from "firebase/firestore";
 
 const COL = "products";
 
@@ -285,7 +286,7 @@ export const getLimitedDrops = async (): Promise<FirestoreProduct[]> => {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreProduct));
 };
 
-export const updateProduct = async (id: string, data: Partial<FirestoreProduct>): Promise<void> => {
+export const updateProduct = async (id: string, data: Partial<FirestoreProduct>, database: Firestore = db): Promise<void> => {
   const sanitized = sanitizeForFirestore({
     ...data,
     updatedAt: serverTimestamp(),
@@ -297,9 +298,9 @@ export const updateProduct = async (id: string, data: Partial<FirestoreProduct>)
     .map(([key]) => key);
   console.log("UNDEFINED PRODUCT FIELDS FOR UPDATE:", undefinedFields);
 
-  await updateDoc(doc(db, COL, id), sanitized);
+  await updateDoc(doc(database, COL, id), sanitized);
 };
 
-export const deleteProduct = async (id: string): Promise<void> => {
-  await deleteDoc(doc(db, COL, id));
+export const deleteProduct = async (id: string, database: Firestore = db): Promise<void> => {
+  await deleteDoc(doc(database, COL, id));
 };

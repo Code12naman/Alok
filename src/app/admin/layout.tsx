@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { AdminProtectedRoute } from "@/components/admin/AdminProtectedRoute";
 import { logoutUser } from "@/services/authService";
+import { adminAuth } from "@/firebase/config";
 import {
   FiHome, FiBox, FiPlusSquare, FiList, FiShoppingCart,
   FiUsers, FiTag, FiStar, FiSettings, FiLogOut, FiSearch,
@@ -114,7 +115,7 @@ function SidebarContent({ pathname, onClose }: { pathname: string; onClose?: () 
 
       <div className="p-3 border-t border-white/10">
         <button
-          onClick={async () => { await logoutUser(); onClose?.(); }}
+          onClick={async () => { await logoutUser(adminAuth); onClose?.(); }}
           className="flex items-center gap-3 px-3 py-2.5 w-full rounded-lg text-white/70 hover:bg-white/5 hover:text-red-400 transition-colors text-sm font-medium"
         >
           <FiLogOut className="w-4 h-4" />

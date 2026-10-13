@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { doc, collection, setDoc, serverTimestamp } from "firebase/firestore";
-import { db, auth } from "@/firebase/config";
+import { adminDb, adminAuth } from "@/firebase/config";
 import {
   normalizeProductData,
   sanitizeForFirestore,
@@ -261,7 +261,7 @@ export default function AddProductPage() {
       return;
     }
 
-    const currentUser = auth.currentUser;
+    const currentUser = adminAuth.currentUser;
     if (!currentUser) {
       console.error("[AddProduct] Firebase auth user is null");
       setToast({
@@ -291,7 +291,7 @@ export default function AddProductPage() {
 
     try {
       const idToken = await currentUser.getIdToken();
-      const productDocRef = doc(collection(db, "products"));
+      const productDocRef = doc(collection(adminDb, "products"));
       const productId = productDocRef.id;
 
       console.log(

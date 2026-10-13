@@ -1,14 +1,14 @@
 "use client";
 
-import { useAuth } from "@/context/AuthContext";
+import { useAdminAuth } from "@/context/AdminAuthContext";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { signOut } from "firebase/auth";
-import { auth } from "@/firebase/config";
+import { adminAuth } from "@/firebase/config";
 
 export function AdminProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, role, loading } = useAuth();
+  const { user, role, loading } = useAdminAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -28,7 +28,7 @@ export function AdminProtectedRoute({ children }: { children: React.ReactNode })
     } else if (role !== null) {
       // User is authenticated, role is loaded, but role is not admin (e.g. customer)
       if (!isLoginPage) {
-        signOut(auth).then(() => {
+        signOut(adminAuth).then(() => {
           router.push("/admin");
         });
       }

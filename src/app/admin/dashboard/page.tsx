@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { collection, getCountFromServer, query, where } from "firebase/firestore";
-import { db } from "@/firebase/config";
+import { adminDb } from "@/firebase/config";
 import { getProducts, FirestoreProduct } from "@/services/productService";
 import { getOrders, NormalizedOrder } from "@/services/orderService";
 import {
@@ -18,7 +18,7 @@ import {
 } from "react-icons/fi";
 import { motion } from "framer-motion";
 import Link from "next/link";
-import { useAuth } from "@/context/AuthContext";
+import { useAdminAuth } from "@/context/AdminAuthContext";
 
 const LOW_STOCK_THRESHOLD = 5;
 const RECENT_ORDER_LIMIT = 5;
@@ -36,7 +36,7 @@ function formatOrderDate(order: NormalizedOrder) {
 }
 
 export default function AdminDashboard() {
-  const { user, role, loading: authLoading } = useAuth();
+  const { user, role, loading: authLoading } = useAdminAuth();
   const [stats, setStats] = useState<Stats>({ products: 0, orders: 0, customers: 0, pendingOrders: 0, lowStock: 0 });
   const [lowStockProducts, setLowStockProducts] = useState<FirestoreProduct[]>([]);
   const [recentOrders, setRecentOrders] = useState<NormalizedOrder[]>([]);
@@ -59,10 +59,10 @@ export default function AdminDashboard() {
 
       const [countsResult, productsResult, ordersResult] = await Promise.allSettled([
         Promise.all([
-          getCountFromServer(collection(db, "products")),
-          getCountFromServer(collection(db, "orders")),
-          getCountFromServer(query(collection(db, "users"), where("role", "==", "customer"))),
-          getCountFromServer(query(collection(db, "orders"), where("status", "==", "Pending"))),
+          getCountFromServer(collection(adminDb, "products")),
+          getCountFromServer(collection(adminDb, "orders")),
+          getCountFromServer(query(collection(adminDb, "users"), where("role", "==", "customer"))),
+          getCountFromServer(query(collection(adminDb, "orders"), where("status", "==", "Pending"))),
         ]),
         getProducts(),
         getOrders(),

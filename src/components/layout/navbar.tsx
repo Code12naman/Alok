@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Search, Heart, ShoppingBag, User, X, Menu, ChevronDown, Sun, Moon } from "lucide-react";
@@ -86,15 +87,23 @@ export function Navbar() {
               <Menu className="h-6 w-6" />
             </button>
 
-            <Link href="/" className="flex items-center gap-2.5 group">
-              <span className="h-8 w-8 rounded-full bg-[#F4512C] text-white flex items-center justify-center font-extrabold text-xs tracking-tighter shadow-sm flex-shrink-0">
-                CT
-              </span>
-              <div className="flex flex-col text-left">
-                <span className="font-extrabold text-sm sm:text-base md:text-lg tracking-tight text-[#111111] group-hover:text-[#F4512C] transition-colors leading-none">
-                  CLASSIC <span className="text-[#F4512C]">THREAD</span>
+            <Link
+              href="/"
+              className="flex min-w-0 flex-1 items-center gap-2.5 group sm:flex-none sm:gap-3"
+              aria-label="Classic Threads MJ Fashion Hub"
+            >
+              <Image
+                src="/images/classic-threads-logo.png"
+                alt="Classic Threads MJ Fashion Hub Logo"
+                width={512}
+                height={512}
+                className="h-10 w-12 shrink-0 object-contain sm:h-12 sm:w-14"
+              />
+              <div className="min-w-0 text-left leading-none">
+                <span className="block truncate text-[10px] font-extrabold tracking-tight text-black transition-colors dark:text-white sm:text-sm md:text-base">
+                  CLASSIC THREADS
                 </span>
-                <span className="text-[8px] sm:text-[9px] font-bold tracking-widest text-gray-400 uppercase mt-0.5 leading-none">
+                <span className="mt-1 block truncate text-[7px] font-bold tracking-[0.16em] text-[#555555] transition-colors dark:text-[#CCCCCC] sm:text-[8px] md:text-[9px]">
                   MJ FASHION HUB
                 </span>
               </div>
@@ -112,12 +121,12 @@ export function Navbar() {
               >
                 <Link
                   href={link.href}
-                  className={`flex items-center gap-1 transition-colors hover:text-[#F4512C] ${
-                    pathname === link.href ? "text-[#F4512C] font-semibold" : ""
+                  className={`flex items-center gap-1 transition-colors hover:text-foreground ${
+                    pathname === link.href ? "text-foreground font-semibold" : ""
                   }`}
                 >
                   {link.name}
-                  {link.dropdown && <ChevronDown className="h-3.5 w-3.5 text-gray-400 group-hover:text-[#F4512C]" />}
+                  {link.dropdown && <ChevronDown className="h-3.5 w-3.5 text-gray-400 group-hover:text-foreground" />}
                 </Link>
 
                 {/* Dropdown Menu */}
@@ -135,7 +144,7 @@ export function Navbar() {
                           <Link
                             key={sub.name}
                             href={sub.href}
-                            className="block px-4 py-2 text-xs font-medium text-gray-700 hover:bg-[#F7F7F5] hover:text-[#F4512C] transition-colors"
+                            className="block px-4 py-2 text-xs font-medium text-gray-700 hover:bg-[#F7F7F5] hover:text-foreground transition-colors"
                           >
                             {sub.name}
                           </Link>
@@ -154,7 +163,7 @@ export function Navbar() {
               onClick={toggleTheme}
               aria-label={themeLabel}
               title={themeLabel}
-              className="p-2 text-gray-700 hover:text-[#F4512C] transition-colors rounded-full hover:bg-gray-100"
+              className="p-2 text-gray-700 hover:text-foreground transition-colors rounded-full hover:bg-gray-100"
             >
               {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
             </button>
@@ -162,7 +171,7 @@ export function Navbar() {
             <button
               onClick={() => setSearchOpen(true)}
               aria-label="Search"
-              className="p-2 text-gray-700 hover:text-[#F4512C] transition-colors rounded-full hover:bg-gray-100"
+              className="p-2 text-gray-700 hover:text-foreground transition-colors rounded-full hover:bg-gray-100"
             >
               <Search className="h-5 w-5" />
             </button>
@@ -171,11 +180,11 @@ export function Navbar() {
             <Link
               href="/wishlist"
               aria-label="Wishlist"
-              className="relative p-2 text-gray-700 hover:text-[#F4512C] transition-colors rounded-full hover:bg-gray-100"
+              className="relative p-2 text-gray-700 hover:text-foreground transition-colors rounded-full hover:bg-gray-100"
             >
               <Heart className="h-5 w-5" />
               {wishlistCount > 0 && (
-                <span className="absolute top-1 right-1 h-4 min-w-4 bg-[#F4512C] text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                <span className="absolute top-1 right-1 h-4 min-w-4 bg-black text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 dark:bg-white dark:text-black">
                   {wishlistCount}
                 </span>
               )}
@@ -185,7 +194,7 @@ export function Navbar() {
             <Link
               href={user ? "/account" : "/login"}
               aria-label="Account"
-              className="p-2 text-gray-700 hover:text-[#F4512C] transition-colors rounded-full hover:bg-gray-100 hidden sm:flex"
+              className="p-2 text-gray-700 hover:text-foreground transition-colors rounded-full hover:bg-gray-100 hidden sm:flex"
             >
               <User className="h-5 w-5" />
             </Link>
@@ -194,11 +203,11 @@ export function Navbar() {
             <button
               onClick={() => setCartOpen(true)}
               aria-label={`Cart (${cartCount})`}
-              className="relative p-2 text-gray-700 hover:text-[#F4512C] transition-colors rounded-full hover:bg-gray-100"
+              className="relative p-2 text-gray-700 hover:text-foreground transition-colors rounded-full hover:bg-gray-100"
             >
               <ShoppingBag className="h-5 w-5" />
               {cartCount > 0 && (
-                <span className="absolute top-1 right-1 h-4 min-w-4 bg-[#F4512C] text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                <span className="absolute top-1 right-1 h-4 min-w-4 bg-black text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 dark:bg-white dark:text-black">
                   {cartCount}
                 </span>
               )}
@@ -231,12 +240,21 @@ export function Navbar() {
             >
               <div className="flex items-center justify-between p-5 border-b border-[#E6E6E3]">
                 <Link href="/" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2">
-                  <span className="h-7 w-7 rounded-full bg-[#F4512C] text-white flex items-center justify-center font-bold text-xs">
-                    N
-                  </span>
-                  <span className="font-bold text-lg text-[#111111]">
-                    STREET<span className="text-[#F4512C]">MODE</span>
-                  </span>
+                  <Image
+                    src="/images/classic-threads-logo.png"
+                    alt="Classic Threads MJ Fashion Hub Logo"
+                    width={512}
+                    height={512}
+                    className="h-12 w-14 shrink-0 object-contain"
+                  />
+                  <div className="text-left leading-none">
+                    <span className="block text-sm font-extrabold tracking-tight text-black dark:text-white">
+                      CLASSIC THREADS
+                    </span>
+                    <span className="mt-1 block text-[8px] font-bold tracking-[0.14em] text-[#555555] dark:text-[#CCCCCC]">
+                      MJ FASHION HUB
+                    </span>
+                  </div>
                 </Link>
                 <button
                   onClick={() => setMobileMenuOpen(false)}
@@ -252,7 +270,7 @@ export function Navbar() {
                     <Link
                       href={link.href}
                       onClick={() => setMobileMenuOpen(false)}
-                      className="block py-2 text-gray-800 hover:text-[#F4512C] transition-colors"
+                      className="block py-2 text-gray-800 hover:text-foreground transition-colors"
                     >
                       {link.name}
                     </Link>
@@ -264,7 +282,7 @@ export function Navbar() {
                             key={sub.name}
                             href={sub.href}
                             onClick={() => setMobileMenuOpen(false)}
-                            className="block py-1 text-xs text-gray-500 hover:text-[#F4512C]"
+                            className="block py-1 text-xs text-gray-500 hover:text-foreground"
                           >
                             {sub.name}
                           </Link>
@@ -280,7 +298,7 @@ export function Navbar() {
                   type="button"
                   onClick={toggleTheme}
                   aria-label={themeLabel}
-                  className="flex items-center gap-2 py-2 text-gray-800 hover:text-[#F4512C]"
+                  className="flex items-center gap-2 py-2 text-gray-800 hover:text-foreground"
                 >
                   {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
                   {theme === "dark" ? "Light Mode" : "Dark Mode"}
@@ -289,13 +307,13 @@ export function Navbar() {
                 <Link
                   href="/wishlist"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center justify-between py-2 text-gray-800 hover:text-[#F4512C]"
+                  className="flex items-center justify-between py-2 text-gray-800 hover:text-foreground"
                 >
                   <span className="flex items-center gap-2">
                     <Heart className="h-4 w-4" /> Wishlist
                   </span>
                   {wishlistCount > 0 && (
-                    <span className="bg-[#F4512C] text-white text-xs px-2 py-0.5 rounded-full font-bold">
+                    <span className="bg-black text-white text-xs px-2 py-0.5 rounded-full font-bold dark:bg-white dark:text-black">
                       {wishlistCount}
                     </span>
                   )}
@@ -304,7 +322,7 @@ export function Navbar() {
                 <Link
                   href={user ? "/account" : "/login"}
                   onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-2 py-2 text-gray-800 hover:text-[#F4512C]"
+                  className="flex items-center gap-2 py-2 text-gray-800 hover:text-foreground"
                 >
                   <User className="h-4 w-4" /> {user ? "My Account" : "Sign In / Register"}
                 </Link>

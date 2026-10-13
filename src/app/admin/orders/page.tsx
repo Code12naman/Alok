@@ -4,10 +4,13 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   getOrders,
+  getAllowedOrderStatusTransitions,
+  normalizeOrderStatus,
   updateOrderStatus,
   NormalizedOrder,
   OrderStatus,
 } from "@/services/orderService";
+import { archiveOrderAsAdmin, deleteOrderAsAdmin } from "@/services/adminDeletionService";
 import {
   FiLoader,
   FiShoppingCart,
@@ -15,11 +18,14 @@ import {
   FiSearch,
   FiArrowRight,
   FiPhone,
+  FiTrash2,
+  FiX,
+  FiAlertTriangle,
 } from "react-icons/fi";
 
-const STATUSES: OrderStatus[] = [
+const ALL_STATUSES: OrderStatus[] = [
   "Pending",
-  "Confirmed",
+  "Order Confirmed",
   "Processing",
   "Shipped",
   "Out for Delivery",
@@ -44,12 +50,17 @@ export default function OrdersPage() {
   const [updating, setUpdating] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedOrder, setSelectedOrder] = useState<NormalizedOrder | null>(null);
+  const [confirmationStep, setConfirmationStep] = useState<1 | 2>(1);
+  const [deleting, setDeleting] = useState(false);
+  const [archiving, setArchiving] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const loadData = async () => {
     setLoading(true);
     try {
       const fetched = await getOrders();
-      setOrders(fetched);
+      setOrders(fetched.filter((order) => !order.archivedAt));
     } catch (err) {
       console.error("[AdminOrders] Failed to load orders:", err);
     } finally {
@@ -65,14 +76,56 @@ export default function OrdersPage() {
     setUpdating(id);
     try {
       await updateOrderStatus(id, status);
-      setOrders((prev) =>
-        prev.map((o) => (o.id === id ? { ...o, status, orderStatus: status } : o))
-      );
+      await loadData();
     } catch (err) {
       console.error("[AdminOrders] Failed to update status:", err);
-      alert("Failed to update status.");
+      alert(err instanceof Error ? err.message : "Failed to update order status.");
     } finally {
       setUpdating(null);
+    }
+  };
+
+  const closeDeleteDialog = () => {
+    if (deleting) return;
+    setSelectedOrder(null);
+    setConfirmationStep(1);
+    setDeleteError(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!selectedOrder || deleting) return;
+    if (confirmationStep === 1) {
+      setConfirmationStep(2);
+      return;
+    }
+
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteOrderAsAdmin(selectedOrder.id);
+      setSelectedOrder(null);
+      setConfirmationStep(1);
+      await loadData();
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Unable to delete order.");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const archiveOrder = async () => {
+    if (!selectedOrder || deleting || archiving) return;
+    setArchiving(true);
+    setDeleteError(null);
+    try {
+      await archiveOrderAsAdmin(selectedOrder.id);
+      setSelectedOrder(null);
+      setConfirmationStep(1);
+      await loadData();
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Unable to archive order.");
+    } finally {
+      setArchiving(false);
     }
   };
 
@@ -130,7 +183,7 @@ export default function OrdersPage() {
             className="bg-[#0a0a0a] border border-white/10 rounded-xl px-3 py-2 text-xs font-semibold text-white focus:outline-none focus:border-[#ff6500] cursor-pointer"
           >
             <option value="all">All Statuses ({orders.length})</option>
-            {STATUSES.map((s) => (
+            {ALL_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
@@ -175,6 +228,11 @@ export default function OrdersPage() {
                   const itemCount = order.items?.length || 0;
                   const itemLabel = `${itemCount} ${itemCount === 1 ? "item" : "items"}`;
                   const orderDisplayId = order.orderNumber || order.orderId || order.id;
+                  const currentStatus = normalizeOrderStatus(order.orderStatus || order.status);
+                  const statusOptions = getAllowedOrderStatusTransitions(currentStatus);
+                  if (process.env.NODE_ENV === "development") {
+                    console.debug("[AdminOrders] status options", { currentStatus, statusOptions });
+                  }
 
                   return (
                     <tr
@@ -238,17 +296,17 @@ export default function OrdersPage() {
                       <td className="px-5 py-4">
                         <div className="relative inline-block">
                           <select
-                            value={order.status}
+                            value={currentStatus}
                             onChange={(e) =>
                               handleStatusChange(order.id, e.target.value as OrderStatus)
                             }
                             disabled={updating === order.id}
                             className={`text-xs px-2.5 py-1 rounded-full border font-bold focus:outline-none cursor-pointer appearance-none pr-6 ${
-                              STATUS_COLORS[order.status] ||
+                              STATUS_COLORS[normalizeOrderStatus(order.orderStatus || order.status)] ||
                               "bg-gray-500/15 text-gray-300 border-gray-500/20"
                             } bg-transparent`}
                           >
-                            {STATUSES.map((s) => (
+                            {statusOptions.map((s) => (
                               <option key={s} value={s} className="bg-[#141414] text-white">
                                 {s}
                               </option>
@@ -266,12 +324,81 @@ export default function OrdersPage() {
                         >
                           View Details <FiArrowRight className="w-3.5 h-3.5" />
                         </Link>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedOrder(order);
+                            setConfirmationStep(1);
+                            setDeleteError(null);
+                          }}
+                          disabled={deleting || archiving}
+                          aria-label={`Delete order ${orderDisplayId}`}
+                          className="ml-3 inline-flex items-center gap-1 text-xs font-bold text-red-400 hover:text-red-300 disabled:opacity-50"
+                        >
+                          <FiTrash2 className="h-3.5 w-3.5" /> Delete
+                        </button>
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {selectedOrder && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeDeleteDialog();
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-order-title"
+            className="w-full max-w-md rounded-2xl border border-white/10 bg-[#141414] p-6 shadow-2xl"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className="rounded-full bg-red-500/15 p-2.5 text-red-400">
+                  <FiAlertTriangle className="h-5 w-5" />
+                </span>
+                <h2 id="delete-order-title" className="text-lg font-bold text-white">
+                  {confirmationStep === 1 ? "Delete order?" : "Confirm permanent deletion"}
+                </h2>
+              </div>
+              <button type="button" onClick={closeDeleteDialog} disabled={deleting} aria-label="Close dialog" className="text-white/50 hover:text-white disabled:opacity-50">
+                <FiX className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="mt-5 space-y-3 text-sm">
+              <p className="text-white">
+                <span className="font-bold">Order #{selectedOrder.orderNumber || selectedOrder.orderId || selectedOrder.id}</span>
+                <span className="block text-white/60">Status: {selectedOrder.orderStatus}</span>
+              </p>
+              <p className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-200">
+                Permanent deletion removes this order record and is only allowed when the backend confirms no protected dependencies. For payment, refund, inventory, COD, or audit history, archive the order instead.
+              </p>
+              {confirmationStep === 2 && (
+                <p className="text-xs font-bold text-red-300">This is the final confirmation. Permanently delete this order?</p>
+              )}
+              {deleteError && <p className="text-xs text-red-400">{deleteError}</p>}
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={archiveOrder} disabled={deleting || archiving} className="rounded-lg border border-amber-500/30 px-4 py-2 text-xs font-bold text-amber-300 hover:bg-amber-500/10 disabled:opacity-50">
+                {archiving ? "Archiving..." : "Archive order"}
+              </button>
+              <button type="button" onClick={closeDeleteDialog} disabled={deleting || archiving} className="rounded-lg border border-white/10 px-4 py-2 text-xs font-bold text-white/70 hover:bg-white/5 disabled:opacity-50">
+                Cancel
+              </button>
+              <button type="button" onClick={confirmDelete} disabled={deleting} className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60">
+                {deleting && <FiLoader className="h-3.5 w-3.5 animate-spin" />}
+                {confirmationStep === 1 ? "Continue" : "Delete permanently"}
+              </button>
+            </div>
           </div>
         </div>
       )}

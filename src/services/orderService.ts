@@ -10,22 +10,68 @@ import {
   serverTimestamp,
   runTransaction,
 } from "firebase/firestore";
-import { db } from "@/firebase/config";
+import { db, adminDb } from "@/firebase/config";
 import { CartItem } from "@/context/CartContext";
 import { Address } from "./addressService";
 import { getImageUrl } from "./productService";
 
 export type PaymentMethod = "Razorpay" | "COD";
 export type PaymentStatus = "Pending" | "Paid" | "Failed" | "Refunded";
+export class OrderLookupError extends Error {
+  code: string;
+
+  constructor(message: string, code = "unknown") {
+    super(message);
+    this.name = "OrderLookupError";
+    this.code = code;
+  }
+}
 export type OrderStatus =
   | "Pending"
-  | "Confirmed"
   | "Order Confirmed"
   | "Processing"
   | "Shipped"
   | "Out for Delivery"
   | "Delivered"
   | "Cancelled";
+
+export const CANONICAL_ORDER_STATUSES: readonly OrderStatus[] = [
+  "Pending",
+  "Order Confirmed",
+  "Processing",
+  "Shipped",
+  "Out for Delivery",
+  "Delivered",
+  "Cancelled",
+];
+
+/**
+ * Keeps legacy Firestore documents and admin inputs compatible with the
+ * canonical status written by checkout.
+ */
+export function normalizeOrderStatus(status: unknown): OrderStatus {
+  if (status === "Confirmed") return "Order Confirmed";
+  if (CANONICAL_ORDER_STATUSES.includes(status as OrderStatus)) {
+    return status as OrderStatus;
+  }
+  return "Pending";
+}
+
+export const ORDER_STATUS_TRANSITIONS: Readonly<Record<OrderStatus, readonly OrderStatus[]>> = {
+  Pending: ["Order Confirmed", "Cancelled"],
+  "Order Confirmed": ["Processing", "Cancelled"],
+  Processing: ["Shipped", "Cancelled"],
+  Shipped: ["Out for Delivery", "Cancelled"],
+  "Out for Delivery": ["Delivered"],
+  Delivered: [],
+  Cancelled: [],
+};
+
+export function getAllowedOrderStatusTransitions(status: OrderStatus): readonly OrderStatus[] {
+  const current = normalizeOrderStatus(status);
+  const nextStatuses = ORDER_STATUS_TRANSITIONS[current];
+  return [current, ...nextStatuses];
+}
 
 export interface OrderItem {
   productId: string;
@@ -87,6 +133,7 @@ export interface OrderData {
   razorpayPaymentId?: string;
   createdAt?: any;
   updatedAt?: any;
+  archivedAt?: any;
 }
 
 export interface NormalizedOrder {
@@ -114,6 +161,7 @@ export interface NormalizedOrder {
   updatedAt?: any;
   createdAtFormatted: string;
   updatedAtFormatted?: string;
+  archivedAt?: any;
 }
 
 export type FirestoreOrder = NormalizedOrder;
@@ -300,7 +348,7 @@ export function normalizeOrder(raw: any): NormalizedOrder {
   const del = Number(raw.deliveryCharge) ?? (sub >= 999 ? 0 : 99);
   const fin = Number(raw.finalAmount) || Number(raw.totalAmount) || (sub + del - disc);
 
-  const statusVal: OrderStatus = raw.orderStatus || raw.status || "Order Confirmed";
+  const statusVal = normalizeOrderStatus(raw.orderStatus || raw.status || "Order Confirmed");
 
   return {
     id: docId,
@@ -329,6 +377,7 @@ export function normalizeOrder(raw: any): NormalizedOrder {
     razorpayPaymentId: raw.razorpayPaymentId || undefined,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
+    archivedAt: raw.archivedAt,
     createdAtFormatted: formatOrderTimestamp(raw.createdAt),
     updatedAtFormatted: raw.updatedAt ? formatOrderTimestamp(raw.updatedAt) : undefined,
   };
@@ -549,7 +598,7 @@ export const createOrder = async (
  */
 export const getOrders = async (): Promise<NormalizedOrder[]> => {
   try {
-    const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
+    const q = query(collection(adminDb, "orders"), orderBy("createdAt", "desc"));
     const snap = await getDocs(q);
     return snap.docs.map((d) => normalizeOrder({ id: d.id, ...d.data() }));
   } catch (error) {
@@ -562,33 +611,25 @@ export const getOrders = async (): Promise<NormalizedOrder[]> => {
  * Updates order status (for admin panel).
  */
 export const updateOrderStatus = async (id: string, status: OrderStatus): Promise<void> => {
-  const docRef = doc(db, "orders", id);
-  await runTransaction(db, async (transaction) => {
+  const docRef = doc(adminDb, "orders", id);
+  await runTransaction(adminDb, async (transaction) => {
     const orderSnapshot = await transaction.get(docRef);
     if (!orderSnapshot.exists()) throw new Error("Order not found.");
     const order = orderSnapshot.data();
-    const current = (order.orderStatus || order.status || "Pending") as OrderStatus;
-    const transitions: Record<string, OrderStatus[]> = {
-      Pending: ["Confirmed", "Order Confirmed", "Cancelled"],
-      Confirmed: ["Processing", "Cancelled"],
-      "Order Confirmed": ["Processing", "Cancelled"],
-      Processing: ["Shipped", "Cancelled"],
-      Shipped: ["Out for Delivery", "Cancelled"],
-      "Out for Delivery": ["Delivered"],
-      Delivered: [],
-      Cancelled: [],
-    };
+    const current = normalizeOrderStatus(order.orderStatus || order.status || "Pending");
+    const nextStatus = normalizeOrderStatus(status);
+    const transitions = ORDER_STATUS_TRANSITIONS[current];
 
-    if (current !== status && !transitions[current]?.includes(status)) {
-      throw new Error(`Invalid order status transition from ${current} to ${status}.`);
+    if (current !== nextStatus && !transitions?.includes(nextStatus)) {
+      throw new Error(`Invalid order status transition from ${current} to ${nextStatus}.`);
     }
 
-    if (status === "Cancelled" && current !== "Cancelled" && !order.stockRestoredAt) {
+    if (nextStatus === "Cancelled" && current !== "Cancelled" && !order.stockRestoredAt) {
       const items = Array.isArray(order.items) ? order.items : Array.isArray(order.products) ? order.products : [];
       const productSnapshots = [];
       for (const item of items) {
         if (item.productId && Number(item.quantity) > 0) {
-          const productRef = doc(db, "products", item.productId);
+          const productRef = doc(adminDb, "products", item.productId);
           productSnapshots.push({
             ref: productRef,
             snapshot: await transaction.get(productRef),
@@ -603,8 +644,8 @@ export const updateOrderStatus = async (id: string, status: OrderStatus): Promis
         }
       }
       transaction.update(docRef, {
-        orderStatus: status,
-        status,
+        orderStatus: nextStatus,
+        status: nextStatus,
         stockRestoredAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -612,8 +653,8 @@ export const updateOrderStatus = async (id: string, status: OrderStatus): Promis
     }
 
     transaction.update(docRef, {
-      orderStatus: status,
-      status,
+      orderStatus: nextStatus,
+      status: nextStatus,
       updatedAt: serverTimestamp(),
     });
   });
@@ -626,8 +667,8 @@ export const updateOrderStatus = async (id: string, status: OrderStatus): Promis
 export const markCodPaymentAsPaid = async (id: string, adminUid: string): Promise<void> => {
   if (!adminUid) throw new Error("Administrator authentication is required.");
 
-  await runTransaction(db, async (transaction) => {
-    const docRef = doc(db, "orders", id);
+  await runTransaction(adminDb, async (transaction) => {
+    const docRef = doc(adminDb, "orders", id);
     const snapshot = await transaction.get(docRef);
     if (!snapshot.exists()) throw new Error("Order not found.");
 
@@ -650,8 +691,7 @@ export const markCodPaymentAsPaid = async (id: string, adminUid: string): Promis
  */
 export const getUserOrders = async (userId: string): Promise<NormalizedOrder[]> => {
   if (!userId) {
-    console.warn("[OrderService] getUserOrders called without userId.");
-    return [];
+    throw new OrderLookupError("Authentication is required to load order history.", "unauthenticated");
   }
 
   try {
@@ -664,7 +704,10 @@ export const getUserOrders = async (userId: string): Promise<NormalizedOrder[]> 
       );
       snap = await getDocs(q);
     } catch (indexErr: any) {
-      console.warn("[OrderService] Composite index query fallback to un-ordered query:", indexErr?.message || indexErr);
+      if (indexErr?.code === "permission-denied" || indexErr?.code === "unauthenticated") {
+        throw indexErr;
+      }
+      console.warn("[OrderService] Falling back to an unordered owner-scoped order query:", indexErr?.code || "unknown");
       const fallbackQuery = query(
         collection(db, "orders"),
         where("userId", "==", userId)
@@ -680,20 +723,34 @@ export const getUserOrders = async (userId: string): Promise<NormalizedOrder[]> 
     });
     return docs;
   } catch (error: any) {
-    console.error(`[OrderService] Error fetching orders for user (${userId}):`, error?.code, error?.message, error);
-    return [];
+    const code = error?.code || "unknown";
+    console.error("[OrderService] Failed to load owner-scoped order history:", code);
+    throw new OrderLookupError(
+      code === "permission-denied"
+        ? "Your session is not authorized to view order history. Please sign in again."
+        : "Unable to load order history. Please try again.",
+      code
+    );
   }
 };
 
 /**
  * Fetches an order by its unique readable orderId or Firestore document id.
  */
-export const getOrderById = async (orderId: string, ownerUserId?: string): Promise<NormalizedOrder | null> => {
+export const getOrderById = async (orderId: string, ownerUserId?: string, database = db): Promise<NormalizedOrder | null> => {
+  if (!orderId) return null;
   try {
     if (ownerUserId) {
-      const ownedOrders = await getDocs(
-        query(collection(db, "orders"), where("userId", "==", ownerUserId))
-      );
+      const directSnapshot = await getDoc(doc(database, "orders", orderId));
+      if (directSnapshot.exists()) {
+        const directData = directSnapshot.data();
+        if (directData.userId === ownerUserId) {
+          return normalizeOrder({ id: directSnapshot.id, ...directData });
+        }
+        return null;
+      }
+
+      const ownedOrders = await getDocs(query(collection(database, "orders"), where("userId", "==", ownerUserId)));
       const ownedOrder = ownedOrders.docs.find((candidate) => {
         const data = candidate.data();
         return data.orderId === orderId || data.orderNumber === orderId || candidate.id === orderId;
@@ -701,33 +758,36 @@ export const getOrderById = async (orderId: string, ownerUserId?: string): Promi
       return ownedOrder ? normalizeOrder({ id: ownedOrder.id, ...ownedOrder.data() }) : null;
     }
 
-    // Customer queries must include ownership so Firestore rules can authorize
-    // the query without exposing whether another user's order exists.
-    const q = query(collection(db, "orders"), where("orderId", "==", orderId));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      const d = snap.docs[0];
+    const directSnapshot = await getDoc(doc(database, "orders", orderId));
+    if (directSnapshot.exists()) {
+      return normalizeOrder({ id: directSnapshot.id, ...directSnapshot.data() });
+    }
+
+    const orderIdSnapshot = await getDocs(
+      query(collection(database, "orders"), where("orderId", "==", orderId))
+    );
+    if (!orderIdSnapshot.empty) {
+      const d = orderIdSnapshot.docs[0];
       return normalizeOrder({ id: d.id, ...d.data() });
     }
 
-    // 2. Query by orderNumber field
-    const qNum = query(collection(db, "orders"), where("orderNumber", "==", orderId));
-    const snapNum = await getDocs(qNum);
-    if (!snapNum.empty) {
-      const d = snapNum.docs[0];
+    const orderNumberSnapshot = await getDocs(
+      query(collection(database, "orders"), where("orderNumber", "==", orderId))
+    );
+    if (!orderNumberSnapshot.empty) {
+      const d = orderNumberSnapshot.docs[0];
       return normalizeOrder({ id: d.id, ...d.data() });
-    }
-
-    // 3. Fallback check by doc ID
-    const docRef = doc(db, "orders", orderId);
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return normalizeOrder({ id: docSnap.id, ...docSnap.data() });
     }
 
     return null;
   } catch (error) {
-    console.error("Error fetching order by ID:", error);
-    return null;
+    const code = (error as { code?: string })?.code || "unknown";
+    console.error("[OrderService] Failed to load owner-scoped order:", code);
+    throw new OrderLookupError(
+      code === "permission-denied"
+        ? "Your session is not authorized to view this order. Please sign in again."
+        : "Unable to load this order. Please try again.",
+      code
+    );
   }
 };

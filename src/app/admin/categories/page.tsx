@@ -13,7 +13,7 @@ import {
   deleteCloudinaryAsset,
   validateImageFile,
 } from "@/services/cloudinaryService";
-import { auth } from "@/firebase/config";
+import { adminAuth, adminDb } from "@/firebase/config";
 import { FiPlus, FiTrash2, FiEdit2, FiLoader, FiCheck, FiX, FiTag } from "react-icons/fi";
 import { SafeImage } from "@/components/ui/SafeImage";
 
@@ -104,7 +104,7 @@ export default function CategoriesPage() {
           return;
         }
 
-        const currentUser = auth.currentUser;
+        const currentUser = adminAuth.currentUser;
         if (!currentUser) {
           console.error("[Category Error] No authenticated Firebase user found.");
           setToast("Authentication error: You are not logged in as an admin user.");
@@ -144,7 +144,7 @@ export default function CategoriesPage() {
           image: imageUrl,
           imagePublicId: imagePublicId,
           active: true,
-        });
+        }, adminDb);
         console.log("[Category] Category updated successfully");
         setToast("Category updated!");
       } else {
@@ -155,7 +155,7 @@ export default function CategoriesPage() {
           image: imageUrl,
           imagePublicId: imagePublicId,
           active: true,
-        });
+        }, adminDb);
         console.log("[Category] Category created successfully");
         setToast("Category added!");
       }
@@ -195,11 +195,11 @@ export default function CategoriesPage() {
     if (!deleteId) return;
     try {
       const catToDelete = categories.find((c) => c.id === deleteId);
-      if (catToDelete?.imagePublicId && auth.currentUser) {
-        const idToken = await auth.currentUser.getIdToken();
+      if (catToDelete?.imagePublicId && adminAuth.currentUser) {
+        const idToken = await adminAuth.currentUser.getIdToken();
         deleteCloudinaryAsset(catToDelete.imagePublicId, idToken).catch(() => {});
       }
-      await deleteCategory(deleteId);
+      await deleteCategory(deleteId, adminDb);
       setCategories((prev) => prev.filter((c) => c.id !== deleteId));
     } catch (err) {
       console.error("[Category Error] Failed to delete category:", err);

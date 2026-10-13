@@ -190,9 +190,9 @@ export const getUserRole = async (uid: string): Promise<UserRole | null> => {
   }
 };
 
-export const logoutUser = async (): Promise<void> => {
+export const logoutUser = async (authInstance = auth): Promise<void> => {
   try {
-    await signOut(auth);
+    await signOut(authInstance);
   } catch (error) {
     console.error("Error signing out:", error);
     throw error;

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth, db } from "@/firebase/config";
+import { adminAuth, adminDb } from "@/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { FiEye, FiEyeOff, FiLock, FiMail } from "react-icons/fi";
@@ -23,9 +23,9 @@ export default function AdminLogin() {
     setError("");
 
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const userCredential = await signInWithEmailAndPassword(adminAuth, email, password);
       const uid = userCredential.user.uid;
-      const userRef = doc(db, "users", uid);
+      const userRef = doc(adminDb, "users", uid);
 
       let snapshot;
       try {
@@ -40,7 +40,7 @@ export default function AdminLogin() {
 
       if (!snapshot.exists()) {
         console.error("ROLE READ ERROR: Admin profile document does not exist.");
-        await auth.signOut();
+        await adminAuth.signOut();
         setError(`Admin profile document missing in Firestore (users/${uid}).`);
         return;
       }
@@ -50,7 +50,7 @@ export default function AdminLogin() {
 
       if (role !== "admin") {
         console.warn("USER ROLE IS NOT ADMIN. ACCESS DENIED.");
-        await auth.signOut();
+        await adminAuth.signOut();
         setError("Unauthorized admin account. You do not have permission to access the admin portal.");
       } else {
         console.log("ADMIN ROLE VERIFIED SUCCESSFULLY. REDIRECTING TO DASHBOARD...");

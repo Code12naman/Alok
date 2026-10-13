@@ -16,6 +16,7 @@ export default function MyOrdersPage() {
 
   const [orders, setOrders] = useState<OrderData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -27,10 +28,13 @@ export default function MyOrdersPage() {
     if (user) {
       getUserOrders(user.uid)
         .then(setOrders)
-        .catch(console.error)
+        .catch((error: unknown) => {
+          console.error("[MyOrders] Order history lookup failed:", error instanceof Error ? error.name : "unknown");
+          setLoadError(error instanceof Error ? error.message : "Unable to load order history.");
+        })
         .finally(() => setLoading(false));
     }
-  }, [user]);
+  }, [user, authLoading]);
 
   if (authLoading || loading) {
     return (
@@ -60,7 +64,12 @@ export default function MyOrdersPage() {
           </Link>
         </div>
 
-        {orders.length === 0 ? (
+        {loadError ? (
+          <div className="bg-white border border-red-200 rounded-3xl p-12 text-center max-w-lg mx-auto shadow-xs">
+            <h2 className="text-xl font-bold text-[#111111] mb-2">Unable to load orders</h2>
+            <p className="text-xs text-red-600 leading-relaxed">{loadError}</p>
+          </div>
+        ) : orders.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

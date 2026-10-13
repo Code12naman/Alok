@@ -4,6 +4,8 @@ import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import {
   getOrderById,
+  getAllowedOrderStatusTransitions,
+  normalizeOrderStatus,
   updateOrderStatus,
   NormalizedOrder,
   OrderStatus,
@@ -23,22 +25,12 @@ import {
   FiChevronDown,
   FiAlertCircle,
 } from "react-icons/fi";
-import { useAuth } from "@/context/AuthContext";
+import { useAdminAuth } from "@/context/AdminAuthContext";
 import { markCodPaymentAsPaid } from "@/services/orderService";
-
-const STATUSES: OrderStatus[] = [
-  "Pending",
-  "Confirmed",
-  "Processing",
-  "Shipped",
-  "Out for Delivery",
-  "Delivered",
-  "Cancelled",
-];
+import { adminDb } from "@/firebase/config";
 
 const STATUS_COLORS: Record<string, string> = {
   Pending: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
-  Confirmed: "bg-blue-500/15 text-blue-400 border-blue-500/30",
   "Order Confirmed": "bg-blue-500/15 text-blue-400 border-blue-500/30",
   Processing: "bg-purple-500/15 text-purple-400 border-purple-500/30",
   Shipped: "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
@@ -59,11 +51,11 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
   const [confirmCodOpen, setConfirmCodOpen] = useState(false);
   const [codUpdating, setCodUpdating] = useState(false);
   const [codError, setCodError] = useState<string | null>(null);
-  const { user, role } = useAuth();
+  const { user, role } = useAdminAuth();
 
   useEffect(() => {
     let active = true;
-    getOrderById(orderIdParam)
+    getOrderById(orderIdParam, undefined, adminDb)
       .then((data) => {
         if (active) setOrder(data);
       })
@@ -81,14 +73,16 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
 
   const handleStatusChange = async (newStatus: OrderStatus) => {
     if (!order) return;
+    const normalizedStatus = normalizeOrderStatus(newStatus);
     setUpdating(true);
     try {
-      await updateOrderStatus(order.id, newStatus);
-      setOrder((prev) => (prev ? { ...prev, status: newStatus, orderStatus: newStatus } : null));
-      showToast(`Order status updated to "${newStatus}"`);
+      await updateOrderStatus(order.id, normalizedStatus);
+      const refreshedOrder = await getOrderById(order.id, undefined, adminDb);
+      setOrder(refreshedOrder);
+      showToast(`Order status updated to "${normalizedStatus}"`);
     } catch (err) {
       console.error("[OrderDetails] Failed to update status:", err);
-      alert("Failed to update status.");
+      alert(err instanceof Error ? err.message : "Failed to update order status.");
     } finally {
       setUpdating(false);
     }
@@ -162,6 +156,11 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
   ]
     .filter(Boolean)
     .join("\n");
+  const currentStatus = normalizeOrderStatus(order.orderStatus || order.status);
+  const statusOptions = getAllowedOrderStatusTransitions(currentStatus);
+  if (process.env.NODE_ENV === "development") {
+    console.debug("[AdminOrderDetails] status options", { currentStatus, statusOptions });
+  }
 
   return (
     <div className="space-y-6">
@@ -188,10 +187,10 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
               </h1>
               <span
                 className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border ${
-                  STATUS_COLORS[order.status] || "bg-gray-500/15 text-gray-300"
+                  STATUS_COLORS[currentStatus] || "bg-gray-500/15 text-gray-300"
                 }`}
               >
-                {order.status}
+                {currentStatus}
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-white/40 mt-1 font-medium">
@@ -210,14 +209,14 @@ export default function OrderDetailsPage({ params }: { params: Promise<{ id: str
           <span className="text-xs font-bold text-white/50 hidden md:inline">Order Status:</span>
           <div className="relative">
             <select
-              value={order.status}
+              value={currentStatus}
               onChange={(e) => handleStatusChange(e.target.value as OrderStatus)}
               disabled={updating}
               className={`text-xs px-3.5 py-2 rounded-xl border font-bold focus:outline-none cursor-pointer appearance-none pr-8 ${
-                STATUS_COLORS[order.status] || "bg-gray-500/15 text-gray-300"
+                STATUS_COLORS[currentStatus] || "bg-gray-500/15 text-gray-300"
               } bg-transparent`}
             >
-              {STATUSES.map((s) => (
+              {statusOptions.map((s) => (
                 <option key={s} value={s} className="bg-[#141414] text-white font-medium">
                   {s}
                 </option>

@@ -12,7 +12,7 @@ import {
   getImagePublicId,
 } from "@/services/productService";
 import { deleteCloudinaryAsset } from "@/services/cloudinaryService";
-import { auth } from "@/firebase/config";
+import { adminAuth, adminDb } from "@/firebase/config";
 import { FiPlus, FiEdit2, FiTrash2, FiSearch, FiLoader, FiPackage, FiEye } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -74,7 +74,7 @@ export default function AdminProductsPage() {
           .filter(Boolean) as string[];
 
         if (publicIds.length > 0) {
-          const user = auth.currentUser;
+          const user = adminAuth.currentUser;
           const idToken = user ? await user.getIdToken().catch(() => "") : "";
           if (idToken) {
             console.log(
@@ -88,7 +88,7 @@ export default function AdminProductsPage() {
       }
 
       // 2. Delete Firestore product document
-      await deleteProduct(deleteId);
+      await deleteProduct(deleteId, adminDb);
       setProducts((prev) => prev.filter((p) => p.id !== deleteId));
     } catch (err) {
       console.error("Failed to delete product:", err);

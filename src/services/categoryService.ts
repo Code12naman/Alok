@@ -10,6 +10,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase/config";
+import type { Firestore } from "firebase/firestore";
 
 const COL = "categories";
 
@@ -127,7 +128,7 @@ export const getCategories = async (): Promise<FirestoreCategory[]> => {
   }
 };
 
-export const addCategory = async (cat: Omit<FirestoreCategory, "id">): Promise<string> => {
+export const addCategory = async (cat: Omit<FirestoreCategory, "id">, database: Firestore = db): Promise<string> => {
   if (!cat.name || !cat.name.trim()) {
     throw new Error("Category name is required.");
   }
@@ -158,7 +159,7 @@ export const addCategory = async (cat: Omit<FirestoreCategory, "id">): Promise<s
     sortOrder: cat.sortOrder || maxSortOrder + 1,
   });
 
-  const docRef = await addDoc(collection(db, COL), {
+  const docRef = await addDoc(collection(database, COL), {
     ...payload,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -167,7 +168,7 @@ export const addCategory = async (cat: Omit<FirestoreCategory, "id">): Promise<s
   return docRef.id;
 };
 
-export const updateCategory = async (id: string, data: Partial<FirestoreCategory>): Promise<void> => {
+export const updateCategory = async (id: string, data: Partial<FirestoreCategory>, database: Firestore = db): Promise<void> => {
   const payload = sanitizeCategoryPayload({
     ...data,
     name: data.name?.trim(),
@@ -176,12 +177,12 @@ export const updateCategory = async (id: string, data: Partial<FirestoreCategory
     imagePublicId: data.imagePublicId,
   });
 
-  await updateDoc(doc(db, COL, id), {
+  await updateDoc(doc(database, COL, id), {
     ...payload,
     updatedAt: serverTimestamp(),
   });
 };
 
-export const deleteCategory = async (id: string): Promise<void> => {
-  await deleteDoc(doc(db, COL, id));
+export const deleteCategory = async (id: string, database: Firestore = db): Promise<void> => {
+  await deleteDoc(doc(database, COL, id));
 };

@@ -93,7 +93,7 @@ service cloud.firestore {
     // - User can read their own orders or create their own order
     // - Admin can read/write all orders
     match /orders/{orderId} {
-      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin());
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
       allow create: if isAuthenticated()
                     && request.resource.data.userId == request.auth.uid
                     && request.resource.data.customerId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.customerId
