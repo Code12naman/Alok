@@ -20,6 +20,7 @@ import {
   Edit2,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { CopyableIdentifier } from "@/components/ui/copyable-identifier";
 import { logoutUser, sendPasswordResetLink, updateCustomerProfile } from "@/services/authService";
 import {
   Address,
@@ -172,10 +173,13 @@ export default function AccountPage() {
             <div className="h-16 w-16 bg-[#FFF3F0] text-[#F4512C] rounded-2xl flex items-center justify-center font-extrabold text-2xl border border-[#F4512C]/20">
               {profile?.name?.charAt(0).toUpperCase() || user.email?.charAt(0).toUpperCase()}
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="font-extrabold text-xl md:text-2xl text-[#111111]">{profile?.name || "Customer Account"}</h1>
-                <span className="bg-[#111111] text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full">
+            <div className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <h1 className="min-w-0 break-words font-extrabold text-xl md:text-2xl text-[#111111]">{profile?.name || "Customer Account"}</h1>
+                {profile?.customerId && (
+                  <CopyableIdentifier label="customer ID" value={profile.customerId} showValue={false} className="text-[#111111] dark:text-white" />
+                )}
+                <span className="max-w-full truncate rounded-full bg-[#111111] px-2.5 py-0.5 font-mono text-[10px] font-bold text-white">
                   {profile?.customerId || "—"}
                 </span>
               </div>
@@ -305,7 +309,15 @@ export default function AccountPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="bg-[#F7F7F5] border border-[#E6E6E3] p-4 rounded-2xl space-y-1">
                     <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Customer ID</span>
-                    <span className="font-extrabold text-sm text-[#F4512C]">{profile?.customerId || "—"}</span>
+                    {profile?.customerId && (
+                      <CopyableIdentifier
+                        label="customer ID"
+                        value={profile.customerId}
+                        showValue={false}
+                        className="w-fit rounded-lg bg-white px-2 py-1 text-sm font-extrabold text-[#F4512C] dark:bg-[#202020]"
+                      />
+                    )}
+                    <span className="break-all font-extrabold text-sm text-[#F4512C]">{profile?.customerId || "—"}</span>
                   </div>
 
                   <div className="bg-[#F7F7F5] border border-[#E6E6E3] p-4 rounded-2xl space-y-1">

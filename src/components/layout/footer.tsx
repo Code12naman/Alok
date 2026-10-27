@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { FaInstagram, FaTiktok, FaYoutube, FaCreditCard, FaCcMastercard, FaCcVisa, FaCcPaypal } from "react-icons/fa6";
 import { ArrowRight } from "lucide-react";
@@ -15,13 +16,17 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 mb-16">
           {/* Brand Column */}
           <div className="lg:col-span-2 space-y-4">
-            <Link href="/" className="flex items-center gap-2.5">
-              <span className="h-8 w-8 rounded-full bg-[#F4512C] text-white flex items-center justify-center font-extrabold text-xs tracking-tighter shadow-sm flex-shrink-0">
-                CT
-              </span>
+            <Link href="/" className="flex items-center gap-2.5" aria-label="Classic Threads MJ Fashion Hub">
+              <Image
+                src="/images/classic-threads-logo.png"
+                alt="Classic Threads MJ Fashion Hub Logo"
+                width={512}
+                height={512}
+                className="h-10 w-12 shrink-0 object-contain"
+              />
               <div className="flex flex-col text-left">
                 <span className="font-extrabold text-base md:text-lg tracking-tight text-white leading-none">
-                  CLASSIC <span className="text-[#F4512C]">THREAD</span>
+                  CLASSIC <span className="text-[#F4512C]">THREADS</span>
                 </span>
                 <span className="text-[9px] font-bold tracking-widest text-gray-400 uppercase mt-0.5 leading-none">
                   MJ FASHION HUB
@@ -32,15 +37,15 @@ export function Footer() {
               Curated apparel, footwear, accessories, and modern lifestyle fashion. Premium crafted, quality checked, and delivered with care.
             </p>
             <div className="flex items-center gap-3 pt-2">
-              <Link href="#" aria-label="Instagram" className="h-9 w-9 bg-white/10 rounded-full flex items-center justify-center text-gray-300 hover:bg-[#F4512C] hover:text-white transition-colors">
+              <a href="https://www.instagram.com/classic_threads_mj?psln=Z2c2aG0yNHNuOHh3" target="_blank" rel="noopener noreferrer" aria-label="Instagram (opens in a new tab)" className="h-9 w-9 cursor-pointer bg-white/10 rounded-full flex items-center justify-center text-gray-300 hover:bg-[#F4512C] hover:text-white transition-colors">
                 <FaInstagram className="h-4 w-4" />
-              </Link>
-              <Link href="#" aria-label="TikTok" className="h-9 w-9 bg-white/10 rounded-full flex items-center justify-center text-gray-300 hover:bg-[#F4512C] hover:text-white transition-colors">
+              </a>
+              <span aria-label="TikTok link not configured" title="TikTok link not configured" className="h-9 w-9 cursor-not-allowed bg-white/10 rounded-full flex items-center justify-center text-gray-500">
                 <FaTiktok className="h-4 w-4" />
-              </Link>
-              <Link href="#" aria-label="YouTube" className="h-9 w-9 bg-white/10 rounded-full flex items-center justify-center text-gray-300 hover:bg-[#F4512C] hover:text-white transition-colors">
+              </span>
+              <a href="https://youtube.com/@classic_threadsmj?si=jPIxeBqTqaCFpTr0" target="_blank" rel="noopener noreferrer" aria-label="YouTube (opens in a new tab)" className="h-9 w-9 cursor-pointer bg-white/10 rounded-full flex items-center justify-center text-gray-300 hover:bg-[#F4512C] hover:text-white transition-colors">
                 <FaYoutube className="h-4 w-4" />
-              </Link>
+              </a>
             </div>
           </div>
 
@@ -88,7 +93,7 @@ export function Footer() {
 
         {/* Bottom Strip */}
         <div className="pt-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4 text-xs text-gray-500">
-          <p>© {new Date().getFullYear()} CLASSIC THREAD — MJ FASHION HUB. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} CLASSIC THREADS — MJ FASHION HUB. All rights reserved.</p>
           
           <div className="flex items-center gap-4 text-gray-400 text-lg">
             <FaCcVisa className="hover:text-white transition-colors" />

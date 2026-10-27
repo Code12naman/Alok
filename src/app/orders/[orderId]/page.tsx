@@ -16,6 +16,7 @@ import {
 import { getOrderById, normalizeOrderStatus, OrderData, OrderLookupError, OrderStatus } from "@/services/orderService";
 import { ReturnExchangeActions } from "@/components/orders/return-exchange-actions";
 import { useAuth } from "@/context/AuthContext";
+import { CopyableIdentifier } from "@/components/ui/copyable-identifier";
 
 const trackingSteps: { status: OrderStatus; label: string }[] = [
   { status: "Order Confirmed", label: "Order Confirmed" },
@@ -109,8 +110,13 @@ export default function OrderDetailsPage() {
             <h1 className="font-extrabold text-2xl md:text-3xl text-foreground tracking-tight">
               Order Details
             </h1>
-            <p className="text-xs text-muted-foreground font-medium">
-              Order ID: <strong className="text-[#F4512C]">#{order.orderId}</strong>
+            <p className="flex flex-wrap items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              Order ID:
+              <CopyableIdentifier
+                label="order ID"
+                value={order.orderId}
+                className="max-w-full rounded-md bg-secondary px-1.5 py-0.5 font-bold text-[#F4512C]"
+              />
             </p>
           </div>
 

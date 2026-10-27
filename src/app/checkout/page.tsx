@@ -27,6 +27,7 @@ import {
   deleteCustomerAddress,
 } from "@/services/addressService";
 import { generateOrderId, PaymentMethod } from "@/services/orderService";
+import { isOrderIdentifier } from "@/lib/identifiers";
 import { processRazorpayPayment, RazorpaySuccessResponse } from "@/services/paymentService";
 
 const inputClass =
@@ -72,7 +73,27 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Razorpay");
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>("");
-  const [checkoutAttemptId] = useState(() => generateOrderId());
+  const [checkoutAttemptId, setCheckoutAttemptId] = useState("");
+  const [checkoutAttemptKey, setCheckoutAttemptKey] = useState("");
+
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const storageKey = `classic-threads-checkout-attempt:${user.uid}`;
+    const storedId = window.sessionStorage.getItem(storageKey);
+    const keyStorageKey = `${storageKey}:key`;
+    const storedKey = window.sessionStorage.getItem(keyStorageKey);
+    const hasStoredKey = storedKey && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(storedKey);
+    const id = isOrderIdentifier(storedId) && hasStoredKey ? storedId : generateOrderId();
+    const key = isOrderIdentifier(storedId) && hasStoredKey ? storedKey : window.crypto.randomUUID();
+    window.sessionStorage.setItem(storageKey, id);
+    window.sessionStorage.setItem(keyStorageKey, key);
+    const stateUpdate = window.setTimeout(() => {
+      setCheckoutAttemptId(id);
+      setCheckoutAttemptKey(key);
+    }, 0);
+    return () => window.clearTimeout(stateUpdate);
+  }, [user?.uid]);
 
   // Address Form State
   const [addrForm, setAddrForm] = useState({
@@ -206,6 +227,10 @@ export default function CheckoutPage() {
       router.push("/login?redirect=/checkout");
       return;
     }
+    if (!checkoutAttemptId) {
+      setErrorMsg("Preparing a secure order ID. Please try again in a moment.");
+      return;
+    }
 
     if (!selectedAddress) {
       setErrorMsg("Please select or add a delivery address to continue.");
@@ -220,6 +245,29 @@ export default function CheckoutPage() {
         throw new Error("The selected delivery address is invalid. Please select it again.");
       }
       const idToken = await user.getIdToken();
+      const reservationResponse = await fetch("/api/checkout/reserve-order-id", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({ orderId: checkoutAttemptId, attemptKey: checkoutAttemptKey }),
+      });
+      const reservationData = await readApiResponse<{ error?: string }>(reservationResponse);
+      if (!reservationResponse.ok) {
+        if (reservationResponse.status === 409) {
+          const nextOrderId = generateOrderId();
+          const nextAttemptKey = window.crypto.randomUUID();
+          const storageKey = `classic-threads-checkout-attempt:${user.uid}`;
+          window.sessionStorage.setItem(storageKey, nextOrderId);
+          window.sessionStorage.setItem(`${storageKey}:key`, nextAttemptKey);
+          setCheckoutAttemptId(nextOrderId);
+          setCheckoutAttemptKey(nextAttemptKey);
+          throw new Error("A rare order ID conflict occurred. A new ID is ready; please place your order again.");
+        }
+        throw new Error(reservationData.error || "Unable to reserve your order ID.");
+      }
+
       const createServerOrder = async (details: {
         paymentStatus: "Pending" | "Paid";
         razorpayOrderId?: string;
@@ -237,6 +285,7 @@ export default function CheckoutPage() {
             addressId: selectedAddress.id,
             paymentMethod,
             checkoutAttemptId,
+            checkoutAttemptKey,
             ...details,
           }),
         });
@@ -250,6 +299,8 @@ export default function CheckoutPage() {
       if (paymentMethod === "COD") {
         // Cash on Delivery Flow
         const createdOrder = await createServerOrder({ paymentStatus: "Pending" });
+        window.sessionStorage.removeItem(`classic-threads-checkout-attempt:${user.uid}`);
+        window.sessionStorage.removeItem(`classic-threads-checkout-attempt:${user.uid}:key`);
         clearCart();
         router.push(`/checkout/success?orderId=${encodeURIComponent(createdOrder.orderId)}`);
       } else {
@@ -260,7 +311,7 @@ export default function CheckoutPage() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${idToken}`,
           },
-          body: JSON.stringify({ items, address: selectedAddress, checkoutAttemptId }),
+          body: JSON.stringify({ items, address: selectedAddress, checkoutAttemptId, checkoutAttemptKey }),
         });
 
         if (!res.ok) {
@@ -307,6 +358,7 @@ export default function CheckoutPage() {
             ...rzpResponse,
             items,
             checkoutAttemptId,
+            checkoutAttemptKey,
           }),
         });
 
@@ -323,6 +375,8 @@ export default function CheckoutPage() {
           razorpaySignature: rzpResponse.razorpay_signature,
         });
 
+        window.sessionStorage.removeItem(`classic-threads-checkout-attempt:${user.uid}`);
+        window.sessionStorage.removeItem(`classic-threads-checkout-attempt:${user.uid}:key`);
         clearCart();
         router.push(`/checkout/success?orderId=${encodeURIComponent(createdOrder.orderId)}`);
       }

@@ -6,7 +6,14 @@ export async function POST(request: Request) {
   try {
     const uid = await verifyFirebaseBearerToken(request);
     const body = await request.json();
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, items, checkoutAttemptId } = body;
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      items,
+      checkoutAttemptId,
+      checkoutAttemptKey,
+    } = body;
 
     const keySecret = process.env.RAZORPAY_KEY_SECRET;
 
@@ -66,6 +73,7 @@ export async function POST(request: Request) {
     if (
       razorpayOrder.notes?.userId !== uid ||
       (checkoutAttemptId && razorpayOrder.notes?.checkoutAttemptId !== checkoutAttemptId) ||
+      (checkoutAttemptKey && razorpayOrder.notes?.checkoutAttemptKey !== checkoutAttemptKey) ||
       payment.order_id !== razorpay_order_id ||
       payment.status !== "captured" ||
       Number(payment.amount) !== Number(razorpayOrder.amount) ||

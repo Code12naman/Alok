@@ -9,6 +9,7 @@ import { getOrderById, OrderData, OrderLookupError } from "@/services/orderServi
 import { SafeImage } from "@/components/ui/SafeImage";
 import { ReturnExchangeActions } from "@/components/orders/return-exchange-actions";
 import { useAuth } from "@/context/AuthContext";
+import { CopyableIdentifier } from "@/components/ui/copyable-identifier";
 
 function CheckoutSuccessContent() {
   const searchParams = useSearchParams();
@@ -55,12 +56,20 @@ function CheckoutSuccessContent() {
               Order Placed Successfully!
             </h1>
             <p className="text-xs text-muted-foreground font-medium">
-              Thank you for shopping with STREETMODE. Your order is being processed.
+              Thank you for shopping with CLASSIC THREADS. Your order is being processed.
             </p>
 
-            <div className="inline-block bg-secondary border border-border rounded-xl px-4 py-2 mt-2">
+            <div className="inline-block max-w-full bg-secondary border border-border rounded-xl px-4 py-2 mt-2">
+              {orderId && (
+                <CopyableIdentifier
+                  label="order ID"
+                  value={orderId}
+                  showValue={false}
+                  className="mr-1 align-middle text-primary"
+                />
+              )}
               <span className="text-xs font-bold text-card-foreground">
-                Order ID: <strong className="text-primary">{orderId || "—"}</strong>
+                Order ID: <strong className="break-all text-primary">{orderId || "—"}</strong>
               </span>
             </div>
           </div>

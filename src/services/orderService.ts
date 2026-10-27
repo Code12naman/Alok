@@ -14,6 +14,7 @@ import { db, adminDb } from "@/firebase/config";
 import { CartItem } from "@/context/CartContext";
 import { Address } from "./addressService";
 import { getImageUrl } from "./productService";
+import { generateReadableIdentifier } from "@/lib/identifiers";
 
 export type PaymentMethod = "Razorpay" | "COD";
 export type PaymentStatus = "Pending" | "Paid" | "Failed" | "Refunded";
@@ -138,7 +139,7 @@ export interface OrderData {
 
 export interface NormalizedOrder {
   id: string; // Firestore Doc ID
-  orderId: string; // e.g. CT-ORD-20261011-A4F91C2D
+  orderId: string; // e.g. ORD-K8M4T7
   orderNumber: string;
   userId: string;
   customerId: string;
@@ -167,15 +168,11 @@ export interface NormalizedOrder {
 export type FirestoreOrder = NormalizedOrder;
 
 /**
- * Generates a readable order ID using the current date and cryptographically
- * secure randomness. The Firestore document ID remains the internal identity.
+ * Generates a short order ID with cryptographically secure randomness.
+ * The Firestore document ID remains the internal identity.
  */
 export function generateOrderId(): string {
-  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const bytes = new Uint8Array(4);
-  globalThis.crypto.getRandomValues(bytes);
-  const suffix = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("").toUpperCase();
-  return `CT-ORD-${date}-${suffix}`;
+  return generateReadableIdentifier("ORD");
 }
 
 /**

@@ -9,6 +9,7 @@ import { useAuth } from "@/context/AuthContext";
 import { getUserOrders, OrderData } from "@/services/orderService";
 import { SafeImage } from "@/components/ui/SafeImage";
 import { ReturnExchangeActions } from "@/components/orders/return-exchange-actions";
+import { CopyableIdentifier } from "@/components/ui/copyable-identifier";
 
 export default function MyOrdersPage() {
   const { user, loading: authLoading } = useAuth();
@@ -101,10 +102,15 @@ export default function MyOrdersPage() {
               >
                 {/* Header Strip */}
                 <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[#E6E6E3] text-xs">
-                  <div>
-                    <span className="font-extrabold text-sm text-[#111111] block">
-                      Order #{order.orderId}
-                    </span>
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                      <span className="font-extrabold text-sm text-[#111111]">Order</span>
+                      <CopyableIdentifier
+                        label="order ID"
+                        value={order.orderId}
+                        className="max-w-full rounded-md bg-[#F7F7F5] px-1.5 py-0.5 text-xs font-bold text-[#111111] dark:bg-[#292929]"
+                      />
+                    </div>
                     <span className="text-gray-400 text-[11px]">
                       Placed on {order.createdAt
                         ? new Date(order.createdAt?.seconds ? order.createdAt.seconds * 1000 : order.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })

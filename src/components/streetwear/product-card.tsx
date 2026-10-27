@@ -100,8 +100,9 @@ export function CyberProductCard({ product, index = 0 }: ProductCardProps) {
         {/* Wishlist Heart Button */}
         <button
           onClick={handleToggleWishlist}
-          aria-label="Toggle Wishlist"
-          className="absolute top-3 right-3 z-10 h-8 w-8 rounded-full bg-white/90 backdrop-blur-xs flex items-center justify-center text-gray-600 hover:text-[#F4512C] transition-colors shadow-2xs cursor-pointer"
+          aria-label={isWishlisted ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
+          aria-pressed={isWishlisted}
+          className="absolute top-3 right-3 z-10 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-black/10 bg-white/95 text-gray-700 shadow-md backdrop-blur-xs transition-colors hover:text-[#F4512C] dark:border-white/25 dark:bg-[#202020]/95 dark:text-gray-100 dark:hover:text-[#F4512C]"
         >
           <Heart
             className={`h-4 w-4 transition-colors ${

@@ -3,6 +3,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import crypto from "crypto";
 import { verifyFirebaseBearerToken } from "@/lib/server-auth";
 import { getAdminDb } from "@/lib/firebase-admin";
+import { isOrderIdentifier } from "@/lib/identifiers";
+import { isSameOrderAttempt, ownsOrderIdReservation } from "@/lib/order-id-reservation";
 
 interface CheckoutItem {
   productId?: string;
@@ -21,16 +23,11 @@ interface CreateOrderBody {
   razorpayPaymentId?: string;
   razorpaySignature?: string;
   checkoutAttemptId?: string;
-}
-
-function createOrderId() {
-  const date = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-  const suffix = crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase();
-  return `CT-ORD-${date}-${suffix}`;
+  checkoutAttemptKey?: string;
 }
 
 function validOrderId(value: unknown): value is string {
-  return typeof value === "string" && /^CT-ORD-\d{8}-[A-F0-9]{8}$/.test(value);
+  return isOrderIdentifier(value) || (typeof value === "string" && /^CT-ORD-\d{8}-[A-F0-9]{8}$/.test(value));
 }
 
 function cleanString(value: unknown) {
@@ -46,6 +43,9 @@ export async function POST(request: Request) {
     const paymentMethod = body.paymentMethod;
     const paymentStatus = body.paymentStatus;
 
+    if (!validOrderId(body.checkoutAttemptId)) {
+      return NextResponse.json({ error: "A valid checkout order ID is required." }, { status: 400 });
+    }
     if (!items.length || !addressId || !paymentMethod || !paymentStatus) {
       return NextResponse.json({ error: "Order details are incomplete." }, { status: 400 });
     }
@@ -75,9 +75,13 @@ export async function POST(request: Request) {
       else aggregated.set(key, { ...item, productId, quantity, size, color });
     }
 
-    const orderId = validOrderId(body.checkoutAttemptId) ? body.checkoutAttemptId : createOrderId();
+    const orderId = body.checkoutAttemptId;
+    const attemptKey = typeof body.checkoutAttemptKey === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.checkoutAttemptKey)
+      ? body.checkoutAttemptKey
+      : orderId;
     const db = getAdminDb();
     const orderRef = db.collection("orders").doc(orderId);
+    const reservationRef = db.collection("orderIdReservations").doc(orderId);
     const profileRef = db.collection("users").doc(uid);
     const addressRef = profileRef.collection("addresses").doc(addressId);
     const productRefs = [...aggregated.values()].map((item) => ({
@@ -121,6 +125,7 @@ export async function POST(request: Request) {
       if (
         razorpayOrder.notes?.userId !== uid ||
         razorpayOrder.notes?.checkoutAttemptId !== orderId ||
+        (body.checkoutAttemptKey && razorpayOrder.notes?.checkoutAttemptKey !== body.checkoutAttemptKey) ||
         payment.order_id !== body.razorpayOrderId ||
         payment.status !== "captured" ||
         payment.currency !== "INR" ||
@@ -132,12 +137,17 @@ export async function POST(request: Request) {
 
     await db.runTransaction(async (transaction) => {
       const orderSnapshot = await transaction.get(orderRef);
+      const reservationSnapshot = await transaction.get(reservationRef);
       if (orderSnapshot.exists) {
         const existing = orderSnapshot.data() || {};
-        if (existing.userId === uid && existing.checkoutAttemptId === orderId) return;
+        if (isSameOrderAttempt(existing, uid, orderId, attemptKey)) return;
         throw new Error("This order ID already exists. Please retry checkout.");
       }
 
+      const reservation = reservationSnapshot.data() || {};
+      if (reservationSnapshot.exists && !ownsOrderIdReservation(reservation, uid, orderId, attemptKey)) {
+        throw new Error("This order ID is already reserved. Please retry checkout.");
+      }
       const profileSnapshot = await transaction.get(profileRef);
       const addressSnapshot = await transaction.get(addressRef);
       const productSnapshots = [];
@@ -223,6 +233,13 @@ export async function POST(request: Request) {
       }))) {
         transaction.update(ref, { stock: stock - item.quantity, updatedAt: FieldValue.serverTimestamp() });
       }
+      if (!reservationSnapshot.exists) {
+        transaction.set(reservationRef, {
+          userId: uid,
+          attemptKey,
+          createdAt: FieldValue.serverTimestamp(),
+        });
+      }
       transaction.set(orderRef, {
         orderNumber: orderId,
         orderId,
@@ -250,6 +267,7 @@ export async function POST(request: Request) {
         orderStatus: "Order Confirmed",
         status: "Order Confirmed",
         checkoutAttemptId: orderId,
+        checkoutAttemptKey: attemptKey,
         ...(paymentMethod === "Razorpay"
           ? { razorpayOrderId: cleanString(body.razorpayOrderId), razorpayPaymentId: cleanString(body.razorpayPaymentId) }
           : {}),

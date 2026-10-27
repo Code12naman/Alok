@@ -17,7 +17,11 @@ export async function POST(request: Request) {
   try {
     const uid = await verifyFirebaseBearerToken(request);
     const body = await request.json();
-    const { items, checkoutAttemptId } = body as { items?: CheckoutItemInput[]; checkoutAttemptId?: string };
+    const { items, checkoutAttemptId, checkoutAttemptKey } = body as {
+      items?: CheckoutItemInput[];
+      checkoutAttemptId?: string;
+      checkoutAttemptKey?: string;
+    };
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: "Cart is empty" }, { status: 400 });
@@ -89,6 +93,7 @@ export async function POST(request: Request) {
           notes: {
             userId: uid,
             checkoutAttemptId: typeof checkoutAttemptId === "string" ? checkoutAttemptId : "",
+            checkoutAttemptKey: typeof checkoutAttemptKey === "string" ? checkoutAttemptKey : "",
           },
         }),
       });

@@ -9,6 +9,7 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "../firebase/config";
+import { isCustomerIdentifier } from "@/lib/identifiers";
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -27,19 +28,22 @@ export interface UserData {
   createdAt?: unknown;
 }
 
-export function generateCustomerId(uid: string): string {
-  if (!uid) {
-    throw new Error("An authenticated Firebase UID is required to generate a customer ID.");
-  }
-  return customerIdForUid(uid);
-}
+async function ensureCustomerId(user: User): Promise<string> {
+  const idToken = await user.getIdToken();
+  const response = await fetch("/api/account/customer-id", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${idToken}` },
+  });
+  const result = await response.json().catch(() => null) as { customerId?: unknown; error?: string } | null;
 
-function customerIdForUid(uid: string): string {
-  return `CT-CUS-${uid.toUpperCase()}`;
+  if (!response.ok || !isCustomerIdentifier(result?.customerId)) {
+    throw new Error(result?.error || "Unable to load your customer ID. Please try again.");
+  }
+  return result.customerId;
 }
 
 /**
- * Checks if a user document exists in Firestore. If not, creates one with a default role and customerId.
+ * Checks if a user document exists, creates it when needed, and ensures a reserved customer ID.
  */
 export const checkAndCreateUserDoc = async (
   user: User,
@@ -49,32 +53,30 @@ export const checkAndCreateUserDoc = async (
   const userRef = doc(db, "users", user.uid);
   const userSnap = await getDoc(userRef);
 
+  let userData: UserData;
   if (!userSnap.exists()) {
-    const customerId = generateCustomerId(user.uid);
-    const userData: UserData = {
+    userData = {
       uid: user.uid,
       name: extraData.name || user.displayName || "",
       email: user.email,
       phone: extraData.phone || user.phoneNumber || "",
-      customerId,
       role: role,
       createdAt: serverTimestamp(),
     };
-    await setDoc(userRef, userData);
-    return userData;
+    await setDoc(userRef, userData, { merge: true });
+  } else {
+    userData = userSnap.data() as UserData;
   }
 
-  const existing = userSnap.data() as UserData;
-  if (!existing.customerId) {
-    const customerId = generateCustomerId(user.uid);
-    await updateDoc(userRef, { customerId });
-    return { ...existing, customerId };
+  if (userData.role === "customer") {
+    const customerId = await ensureCustomerId(user);
+    return { ...userData, customerId };
   }
-  return existing;
+  return userData;
 };
 
 /**
- * Registers a new customer with email/password and a permanent UID-derived customer ID.
+ * Registers a new customer with email/password and a reserved, permanent customer ID.
  */
 export interface CustomerRegistration {
   firstName: string;
@@ -95,7 +97,6 @@ export const signUpCustomer = async ({
 }: CustomerRegistration): Promise<UserData> => {
   const res = await createUserWithEmailAndPassword(auth, email.trim(), password);
   const name = `${firstName.trim()} ${lastName.trim()}`.trim();
-  const customerId = generateCustomerId(res.user.uid);
   const userData: UserData = {
     uid: res.user.uid,
     name,
@@ -104,12 +105,12 @@ export const signUpCustomer = async ({
     email: res.user.email,
     phone: phone.trim(),
     dateOfBirth: dateOfBirth?.trim() || null,
-    customerId,
     role: "customer",
     createdAt: serverTimestamp(),
   };
-  await setDoc(doc(db, "users", res.user.uid), userData);
-  return userData;
+  await setDoc(doc(db, "users", res.user.uid), userData, { merge: true });
+  const customerId = await ensureCustomerId(res.user);
+  return { ...userData, customerId };
 };
 
 export const updateCustomerProfile = async (
@@ -162,12 +163,20 @@ export const getUserProfile = async (uid: string): Promise<UserData | null> => {
     const userSnap = await getDoc(userRef);
 
     if (userSnap.exists()) {
-      return userSnap.data() as UserData;
+      const userData = userSnap.data() as UserData;
+      if (userData.role === "customer") {
+        const currentUser = auth.currentUser;
+        if (!currentUser || currentUser.uid !== uid) {
+          throw new Error("Authenticated user is unavailable.");
+        }
+        return { ...userData, customerId: await ensureCustomerId(currentUser) };
+      }
+      return userData;
     }
     return null;
   } catch (error) {
     console.error("Error fetching user profile:", error);
-    return null;
+    throw error;
   }
 };
 

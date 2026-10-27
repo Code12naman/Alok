@@ -4,36 +4,25 @@ import { SafeImage } from "@/components/ui/SafeImage";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { ArrowRight } from "lucide-react";
+import { getFlashSaleCountdown, parseFlashSaleEndAt } from "@/lib/flash-sale";
 
 export function PromoBanners() {
-  // Countdown state: 2h 15m 45s
-  const [timeLeft, setTimeLeft] = useState({
-    hours: 2,
-    minutes: 15,
-    seconds: 45,
-    millis: 30,
-  });
+  const saleEndAt = parseFlashSaleEndAt(process.env.NEXT_PUBLIC_FLASH_SALE_END_AT);
+  const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        const totalSec = prev.hours * 3600 + prev.minutes * 60 + prev.seconds;
-        if (totalSec <= 0) {
-          return { hours: 0, minutes: 0, seconds: 0, millis: 0 };
-        }
-        const nextSec = totalSec - 1;
-        const hours = Math.floor(nextSec / 3600);
-        const minutes = Math.floor((nextSec % 3600) / 60);
-        const seconds = nextSec % 60;
-        const millis = Math.floor(Math.random() * 80) + 10;
-        return { hours, minutes, seconds, millis };
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+    if (saleEndAt === null) return;
 
+    const initialUpdate = window.setTimeout(() => setNow(Date.now()), 0);
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => {
+      window.clearTimeout(initialUpdate);
+      window.clearInterval(timer);
+    };
+  }, [saleEndAt]);
+
+  const timeLeft = saleEndAt !== null && now !== null ? getFlashSaleCountdown(saleEndAt, now) : null;
   const format = (n: number) => String(n).padStart(2, "0");
 
   return (
@@ -63,21 +52,30 @@ export function PromoBanners() {
               </h3>
 
               {/* Countdown timer */}
-              <div className="flex items-center gap-2 mb-6">
-                {[
-                  { label: "HRS", val: format(timeLeft.hours) },
-                  { label: "MIN", val: format(timeLeft.minutes) },
-                  { label: "SEC", val: format(timeLeft.seconds) },
-                  { label: "MS", val: format(timeLeft.millis) },
-                ].map((unit, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <div className="bg-white/20 backdrop-blur-xs px-2.5 py-1.5 rounded-lg text-center min-w-[36px]">
-                      <span className="block font-bold text-sm leading-none">{unit.val}</span>
+              {timeLeft?.expired ? (
+                <p className="mb-6 text-sm font-bold" role="status">Flash sale ended</p>
+              ) : timeLeft ? (
+                <div className="mb-6 flex items-center gap-2" aria-label="Time remaining in flash sale">
+                  {[
+                    { label: "DAYS", val: format(timeLeft.days) },
+                    { label: "HRS", val: format(timeLeft.hours) },
+                    { label: "MIN", val: format(timeLeft.minutes) },
+                    { label: "SEC", val: format(timeLeft.seconds) },
+                  ].map((unit, i) => (
+                    <div key={unit.label} className="flex items-center gap-2">
+                      <div className="min-w-[36px] rounded-lg bg-white/20 px-2.5 py-1.5 text-center backdrop-blur-xs">
+                        <span className="block text-sm font-bold leading-none">{unit.val}</span>
+                        <span className="mt-1 block text-[8px] font-semibold tracking-wide">{unit.label}</span>
+                      </div>
+                      {i < 3 && <span className="text-xs font-bold opacity-75">:</span>}
                     </div>
-                    {i < 3 && <span className="font-bold text-xs opacity-75">:</span>}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mb-6 text-xs font-semibold text-white/90" role="status">
+                  Sale end date to be announced
+                </p>
+              )}
 
               <Link
                 href="/shop?sale=true"
