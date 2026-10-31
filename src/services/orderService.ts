@@ -17,7 +17,7 @@ import { getImageUrl } from "./productService";
 import { generateReadableIdentifier } from "@/lib/identifiers";
 
 export type PaymentMethod = "Razorpay" | "COD";
-export type PaymentStatus = "Pending" | "Paid" | "Failed" | "Refunded";
+export type PaymentStatus = "Pending" | "Paid" | "Failed" | "Cancelled" | "Refunded";
 export class OrderLookupError extends Error {
   code: string;
 
@@ -367,7 +367,11 @@ export function normalizeOrder(raw: any): NormalizedOrder {
     deliveryCharge: del,
     finalAmount: fin,
     paymentMethod: raw.paymentMethod || "COD",
-    paymentStatus: raw.paymentStatus || (raw.paymentMethod === "Razorpay" ? "Paid" : "Pending"),
+    paymentStatus: raw.paymentMethod === "Razorpay" &&
+      raw.paymentStatus === "Paid" &&
+      !raw.paymentVerifiedAt
+      ? "Pending"
+      : raw.paymentStatus || "Pending",
     orderStatus: statusVal,
     status: statusVal,
     razorpayOrderId: raw.razorpayOrderId || undefined,
@@ -395,6 +399,9 @@ export const createOrder = async (
   couponDetails?: { couponCode?: string; discount?: number },
   checkoutAttemptId?: string
 ): Promise<NormalizedOrder> => {
+  if (paymentMethod !== "COD" || paymentStatus !== "Pending") {
+    throw new Error("Online orders must be created by the verified server-side payment flow.");
+  }
   if (!userId) {
     throw new Error("Authentication required: Order creation requires a logged-in user ID.");
   }
@@ -405,15 +412,6 @@ export const createOrder = async (
   const profileCustomerId = profileSnapshot.data()?.customerId;
   if (!profileSnapshot.exists() || typeof profileCustomerId !== "string" || !profileCustomerId) {
     throw new Error("Customer profile is incomplete. Please refresh your account and try again.");
-  }
-
-  if (razorpayDetails?.razorpayOrderId) {
-    const existing = await getDocs(
-      query(collection(db, "orders"), where("userId", "==", userId), where("razorpayOrderId", "==", razorpayDetails.razorpayOrderId))
-    );
-    if (!existing.empty) {
-      return normalizeOrder({ id: existing.docs[0].id, ...existing.docs[0].data() });
-    }
   }
 
   const orderId = checkoutAttemptId || generateOrderId();
@@ -530,13 +528,6 @@ export const createOrder = async (
     checkoutAttemptId: orderId,
   };
 
-  if (razorpayDetails?.razorpayOrderId) {
-    rawPayload.razorpayOrderId = razorpayDetails.razorpayOrderId;
-  }
-  if (razorpayDetails?.razorpayPaymentId) {
-    rawPayload.razorpayPaymentId = razorpayDetails.razorpayPaymentId;
-  }
-
   // 5. Deep sanitization to guarantee NO undefined fields
   const sanitizedPayload = deepSanitizeFirestore(rawPayload);
 
@@ -621,7 +612,10 @@ export const updateOrderStatus = async (id: string, status: OrderStatus): Promis
       throw new Error(`Invalid order status transition from ${current} to ${nextStatus}.`);
     }
 
-    if (nextStatus === "Cancelled" && current !== "Cancelled" && !order.stockRestoredAt) {
+    const shouldRestoreStock = order.paymentMethod === "Razorpay"
+      ? order.inventoryReserved === true || (order.inventoryReserved === undefined && !order.stockRestoredAt)
+      : !order.stockRestoredAt;
+    if (nextStatus === "Cancelled" && current !== "Cancelled" && shouldRestoreStock) {
       const items = Array.isArray(order.items) ? order.items : Array.isArray(order.products) ? order.products : [];
       const productSnapshots = [];
       for (const item of items) {
@@ -644,6 +638,7 @@ export const updateOrderStatus = async (id: string, status: OrderStatus): Promis
         orderStatus: nextStatus,
         status: nextStatus,
         stockRestoredAt: serverTimestamp(),
+        ...(order.paymentMethod === "Razorpay" ? { inventoryReserved: false } : {}),
         updatedAt: serverTimestamp(),
       });
       return;
@@ -652,6 +647,7 @@ export const updateOrderStatus = async (id: string, status: OrderStatus): Promis
     transaction.update(docRef, {
       orderStatus: nextStatus,
       status: nextStatus,
+      ...(nextStatus === "Cancelled" && order.paymentMethod === "Razorpay" ? { inventoryReserved: false } : {}),
       updatedAt: serverTimestamp(),
     });
   });

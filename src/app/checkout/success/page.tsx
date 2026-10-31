@@ -152,7 +152,7 @@ function CheckoutSuccessContent() {
                     </strong>
                   </p>
                   <p className="text-muted-foreground flex justify-between pt-1 border-t border-border">
-                    <span>Total Amount Paid:</span>
+                    <span>Order Total:</span>
                     <strong className="text-primary font-extrabold text-sm">
                       ₹{order.finalAmount.toLocaleString("en-IN")}
                     </strong>

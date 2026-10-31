@@ -28,7 +28,11 @@ import {
 } from "@/services/addressService";
 import { generateOrderId, PaymentMethod } from "@/services/orderService";
 import { isOrderIdentifier } from "@/lib/identifiers";
-import { processRazorpayPayment, RazorpaySuccessResponse } from "@/services/paymentService";
+import {
+  PaymentCancelledError,
+  processRazorpayPayment,
+} from "@/services/paymentService";
+import { safePaymentErrorMessage } from "@/lib/payment-errors";
 
 const inputClass =
   "w-full bg-secondary border border-border rounded-xl px-4 py-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-[#F4512C] transition-colors font-medium";
@@ -45,19 +49,64 @@ function errorMessage(error: unknown, fallback: string) {
 async function readApiResponse<T>(response: Response): Promise<T> {
   const body = await response.text();
   const contentType = response.headers.get("content-type") || "";
+  let parsed: unknown;
+  if (contentType.includes("application/json")) {
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      parsed = undefined;
+    }
+  }
+
+  if (!response.ok) {
+    const errorMessage = parsed && typeof parsed === "object" && "error" in parsed &&
+      typeof parsed.error === "string"
+      ? parsed.error
+      : `Checkout API returned HTTP ${response.status}.`;
+    throw new CheckoutApiError(errorMessage, response.status, parsed);
+  }
+
   if (!contentType.includes("application/json")) {
-    throw new Error(
+    throw new CheckoutApiError(
       response.status === 404
         ? "Checkout service is not available in this deployment. Please try again after the latest deployment is published."
-        : `Checkout service returned an unexpected response (${response.status}).`
+        : `Checkout service returned an unexpected response (${response.status}).`,
+      response.status,
+      undefined
     );
   }
 
-  try {
-    return JSON.parse(body) as T;
-  } catch {
-    throw new Error("Checkout service returned an invalid response. Please try again.");
+  if (parsed === undefined) {
+    throw new CheckoutApiError(
+      "Checkout service returned an invalid response. Please try again.",
+      response.status,
+      undefined
+    );
   }
+  return parsed as T;
+}
+
+class CheckoutApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly responseBody: unknown
+  ) {
+    super(message);
+    this.name = "CheckoutApiError";
+  }
+}
+
+function safeCheckoutResponseBody(value: unknown): Record<string, string | boolean> | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const body: Record<string, string | boolean> = {};
+  if ("error" in value && typeof value.error === "string") {
+    body.error = safePaymentErrorMessage(new Error(value.error));
+  }
+  if ("verified" in value && typeof value.verified === "boolean") {
+    body.verified = value.verified;
+  }
+  return Object.keys(body).length ? body : undefined;
 }
 
 export default function CheckoutPage() {
@@ -239,12 +288,27 @@ export default function CheckoutPage() {
 
     setIsProcessing(true);
     setErrorMsg("");
+    let stage = "validate-checkout";
 
     try {
       if (!selectedAddress.id) {
         throw new Error("The selected delivery address is invalid. Please select it again.");
       }
       const idToken = await user.getIdToken();
+      const storageKey = `classic-threads-checkout-attempt:${user.uid}`;
+      const clearCheckoutAttempt = () => {
+        window.sessionStorage.removeItem(storageKey);
+        window.sessionStorage.removeItem(`${storageKey}:key`);
+      };
+      const rotateCheckoutAttempt = () => {
+        const nextOrderId = generateOrderId();
+        const nextAttemptKey = window.crypto.randomUUID();
+        window.sessionStorage.setItem(storageKey, nextOrderId);
+        window.sessionStorage.setItem(`${storageKey}:key`, nextAttemptKey);
+        setCheckoutAttemptId(nextOrderId);
+        setCheckoutAttemptKey(nextAttemptKey);
+      };
+      stage = "reserve-order-id";
       const reservationResponse = await fetch("/api/checkout/reserve-order-id", {
         method: "POST",
         headers: {
@@ -253,9 +317,10 @@ export default function CheckoutPage() {
         },
         body: JSON.stringify({ orderId: checkoutAttemptId, attemptKey: checkoutAttemptKey }),
       });
-      const reservationData = await readApiResponse<{ error?: string }>(reservationResponse);
-      if (!reservationResponse.ok) {
-        if (reservationResponse.status === 409) {
+      try {
+        await readApiResponse<{ orderId?: string }>(reservationResponse);
+      } catch (error) {
+        if (error instanceof CheckoutApiError && error.status === 409) {
           const nextOrderId = generateOrderId();
           const nextAttemptKey = window.crypto.randomUUID();
           const storageKey = `classic-threads-checkout-attempt:${user.uid}`;
@@ -265,15 +330,11 @@ export default function CheckoutPage() {
           setCheckoutAttemptKey(nextAttemptKey);
           throw new Error("A rare order ID conflict occurred. A new ID is ready; please place your order again.");
         }
-        throw new Error(reservationData.error || "Unable to reserve your order ID.");
+        throw error;
       }
 
-      const createServerOrder = async (details: {
-        paymentStatus: "Pending" | "Paid";
-        razorpayOrderId?: string;
-        razorpayPaymentId?: string;
-        razorpaySignature?: string;
-      }) => {
+      const createCodOrder = async () => {
+        stage = "create-cod-order";
         const response = await fetch("/api/checkout/create-order", {
           method: "POST",
           headers: {
@@ -283,50 +344,63 @@ export default function CheckoutPage() {
           body: JSON.stringify({
             items,
             addressId: selectedAddress.id,
-            paymentMethod,
+            paymentMethod: "COD",
             checkoutAttemptId,
             checkoutAttemptKey,
-            ...details,
           }),
         });
         const data = await readApiResponse<{ error?: string; orderId?: string }>(response);
-        if (!response.ok) {
-          throw new Error(data.error || "Unable to create your order.");
-        }
-        return data as { orderId: string };
+        if (!data.orderId) throw new Error("Checkout API returned no order ID.");
+        return { orderId: data.orderId };
       };
 
       if (paymentMethod === "COD") {
-        // Cash on Delivery Flow
-        const createdOrder = await createServerOrder({ paymentStatus: "Pending" });
-        window.sessionStorage.removeItem(`classic-threads-checkout-attempt:${user.uid}`);
-        window.sessionStorage.removeItem(`classic-threads-checkout-attempt:${user.uid}:key`);
+        const createdOrder = await createCodOrder();
+        clearCheckoutAttempt();
         clearCart();
         router.push(`/checkout/success?orderId=${encodeURIComponent(createdOrder.orderId)}`);
       } else {
-        // Razorpay Payment Flow
+        stage = "create-razorpay-order";
         const res = await fetch("/api/checkout/razorpay-order", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${idToken}`,
           },
-          body: JSON.stringify({ items, address: selectedAddress, checkoutAttemptId, checkoutAttemptKey }),
+          body: JSON.stringify({
+            items,
+            addressId: selectedAddress.id,
+            checkoutAttemptId,
+            checkoutAttemptKey,
+          }),
         });
 
-        if (!res.ok) {
-          const errData = await readApiResponse<{ error?: string }>(res);
-          throw new Error(errData.error || "Failed to create payment order");
+        const razorpayOrder = await readApiResponse<{
+          id?: string;
+          amount?: number;
+          currency?: string;
+          keyId?: string;
+          orderId?: string;
+          alreadyPaid?: boolean;
+          error?: string;
+        }>(res);
+        if (razorpayOrder.alreadyPaid && razorpayOrder.orderId) {
+          clearCheckoutAttempt();
+          clearCart();
+          router.push(`/checkout/success?orderId=${encodeURIComponent(razorpayOrder.orderId)}`);
+          return;
+        }
+        if (
+          !razorpayOrder.id ||
+          !razorpayOrder.amount ||
+          razorpayOrder.currency !== "INR" ||
+          !razorpayOrder.keyId
+        ) {
+          throw new Error("Razorpay returned incomplete payment details.");
         }
 
-        const razorpayOrder = await readApiResponse<{
-          id: string;
-          amount: number;
-          keyId: string;
-        }>(res);
-
-        // Process Razorpay Checkout Modal
-        let rzpResponse: RazorpaySuccessResponse | null = null;
+        let rzpResponse: Awaited<ReturnType<typeof processRazorpayPayment>>;
+        stage = "open-razorpay-checkout";
         try {
           rzpResponse = await processRazorpayPayment({
             orderId: razorpayOrder.id,
@@ -337,17 +411,38 @@ export default function CheckoutPage() {
             customerPhone: selectedAddress.phone || profile.phone || "",
           });
         } catch (err: unknown) {
-          if (errorMessage(err, "").includes("cancelled")) {
-            setIsProcessing(false);
+          if (err instanceof PaymentCancelledError) {
+            stage = "cancel-razorpay-checkout";
+            const cancelResponse = await fetch("/api/checkout/cancel-payment", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${idToken}`,
+              },
+              body: JSON.stringify({ orderId: checkoutAttemptId, attemptKey: checkoutAttemptKey }),
+            });
+            const cancelData = await readApiResponse<{
+              cancelled?: boolean;
+              paid?: boolean;
+              orderId?: string;
+              error?: string;
+            }>(cancelResponse);
+            if (!cancelResponse.ok) {
+              throw new Error(cancelData.error || "Unable to confirm payment cancellation.");
+            }
+            if (cancelData.paid && cancelData.orderId) {
+              clearCheckoutAttempt();
+              clearCart();
+              router.push(`/checkout/success?orderId=${encodeURIComponent(cancelData.orderId)}`);
+              return;
+            }
+            if (cancelData.cancelled) rotateCheckoutAttempt();
             return;
           }
           throw err;
         }
-        if (!rzpResponse) {
-          throw new Error("Razorpay did not return payment details.");
-        }
 
-        // Verify Payment Signature on Backend
+        stage = "verify-razorpay-payment";
         const verifyRes = await fetch("/api/checkout/verify-payment", {
           method: "POST",
           headers: {
@@ -356,7 +451,6 @@ export default function CheckoutPage() {
           },
           body: JSON.stringify({
             ...rzpResponse,
-            items,
             checkoutAttemptId,
             checkoutAttemptKey,
           }),
@@ -367,21 +461,25 @@ export default function CheckoutPage() {
           throw new Error(verifyData.error || "Payment signature verification failed");
         }
 
-        // Create Paid Order in Firestore
-        const createdOrder = await createServerOrder({
-          paymentStatus: "Paid",
-          razorpayOrderId: rzpResponse.razorpay_order_id,
-          razorpayPaymentId: rzpResponse.razorpay_payment_id,
-          razorpaySignature: rzpResponse.razorpay_signature,
-        });
-
-        window.sessionStorage.removeItem(`classic-threads-checkout-attempt:${user.uid}`);
-        window.sessionStorage.removeItem(`classic-threads-checkout-attempt:${user.uid}:key`);
+        clearCheckoutAttempt();
         clearCart();
-        router.push(`/checkout/success?orderId=${encodeURIComponent(createdOrder.orderId)}`);
+        router.push(`/checkout/success?orderId=${encodeURIComponent(checkoutAttemptId)}`);
       }
     } catch (err: unknown) {
-      console.error("Order processing error:", err);
+      const details = {
+        stage,
+        errorType: err instanceof Error ? err.name : typeof err,
+        errorMessage: safePaymentErrorMessage(err),
+        ...(err instanceof CheckoutApiError
+          ? {
+              httpStatus: err.status,
+              ...(safeCheckoutResponseBody(err.responseBody)
+                ? { apiResponseBody: safeCheckoutResponseBody(err.responseBody) }
+                : {}),
+            }
+          : {}),
+      };
+      console.error("Checkout order processing failed.", details);
       setErrorMsg(errorMessage(err, "Failed to process order. Please try again."));
     } finally {
       setIsProcessing(false);

@@ -4,15 +4,33 @@ import { verifyFirebaseBearerToken } from "@/lib/server-auth";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { isOrderIdentifier } from "@/lib/identifiers";
 import { isSameOrderAttempt, ownsOrderIdReservation } from "@/lib/order-id-reservation";
+import {
+  enforcePaymentRateLimit,
+  logPaymentRouteFailure,
+  PaymentRateLimitError,
+} from "@/lib/razorpay-server";
+
+export const runtime = "nodejs";
 
 function isValidOrderId(value: unknown): value is string {
   return isOrderIdentifier(value) || (typeof value === "string" && /^CT-ORD-\d{8}-[A-F0-9]{8}$/.test(value));
 }
 
 export async function POST(request: Request) {
+  let stage = "authentication";
   try {
     const uid = await verifyFirebaseBearerToken(request);
-    const body = await request.json() as { orderId?: unknown; attemptKey?: unknown };
+    stage = "rate-limit";
+    await enforcePaymentRateLimit(uid, "reserve");
+    let body: { orderId?: unknown; attemptKey?: unknown };
+    try {
+      body = await request.json() as { orderId?: unknown; attemptKey?: unknown };
+    } catch {
+      return NextResponse.json({ error: "Invalid order reservation request." }, { status: 400 });
+    }
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Invalid order reservation request." }, { status: 400 });
+    }
     if (!isValidOrderId(body.orderId)) {
       return NextResponse.json({ error: "A valid order ID is required." }, { status: 400 });
     }
@@ -20,6 +38,7 @@ export async function POST(request: Request) {
       ? body.attemptKey
       : body.orderId;
 
+    stage = "reserve-order-id";
     const db = getAdminDb();
     const orderId = body.orderId;
     const orderRef = db.collection("orders").doc(orderId);
@@ -51,8 +70,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ orderId });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unable to reserve an order ID.";
-    const status = message.includes("Authentication") || message.includes("token") ? 401 : 500;
-    console.error("Order ID reservation failed:", message);
+    const status = error instanceof PaymentRateLimitError
+      ? 429
+      : /Authentication|token/i.test(message)
+        ? 401
+        : 500;
+    logPaymentRouteFailure(stage, error);
     return NextResponse.json({ error: message }, { status });
   }
 }

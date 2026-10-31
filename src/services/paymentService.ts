@@ -1,13 +1,43 @@
-/**
- * Dynamically loads the Razorpay Checkout SDK script into the browser context.
- */
+interface RazorpayFailureResponse {
+  error?: { description?: string };
+}
+
+interface RazorpayCheckoutOptions {
+  key: string;
+  amount: number;
+  currency: string;
+  name: string;
+  description: string;
+  image: string;
+  order_id: string;
+  prefill: { name: string; email: string; contact: string };
+  theme: { color: string };
+  handler: (response: RazorpaySuccessResponse) => void;
+  modal: { ondismiss: () => void };
+}
+
+interface RazorpayCheckoutInstance {
+  on: (event: "payment.failed", callback: (response: RazorpayFailureResponse) => void) => void;
+  open: () => void;
+}
+
+interface RazorpayCheckoutConstructor {
+  new(options: RazorpayCheckoutOptions): RazorpayCheckoutInstance;
+}
+
+declare global {
+  interface Window {
+    Razorpay?: RazorpayCheckoutConstructor;
+  }
+}
+
 export const loadRazorpayScript = (): Promise<boolean> => {
   return new Promise((resolve) => {
     if (typeof window === "undefined") {
       resolve(false);
       return;
     }
-    if ((window as any).Razorpay) {
+    if (window.Razorpay) {
       resolve(true);
       return;
     }
@@ -23,6 +53,20 @@ export interface RazorpaySuccessResponse {
   razorpay_payment_id: string;
   razorpay_order_id: string;
   razorpay_signature: string;
+}
+
+export class PaymentCancelledError extends Error {
+  constructor() {
+    super("Payment was cancelled.");
+    this.name = "PaymentCancelledError";
+  }
+}
+
+export class PaymentFailedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PaymentFailedError";
+  }
 }
 
 export const processRazorpayPayment = async ({
@@ -46,11 +90,12 @@ export const processRazorpayPayment = async ({
   }
 
   return new Promise((resolve, reject) => {
-    const options = {
+    let settled = false;
+    const options: RazorpayCheckoutOptions = {
       key: keyId,
       amount: amount,
       currency: "INR",
-      name: "STREETMODE",
+      name: "Classic Threads MJ",
       description: `Order #${orderId}`,
       image: "/favicon.ico",
       order_id: orderId,
@@ -62,19 +107,31 @@ export const processRazorpayPayment = async ({
       theme: {
         color: "#F4512C",
       },
-      handler: function (response: RazorpaySuccessResponse) {
+      handler: (response: RazorpaySuccessResponse) => {
+        if (settled) return;
+        settled = true;
         resolve(response);
       },
       modal: {
-        ondismiss: function () {
-          reject(new Error("Payment window was cancelled by user."));
+        ondismiss: () => {
+          if (settled) return;
+          settled = true;
+          reject(new PaymentCancelledError());
         },
       },
     };
 
-    const rzp = new (window as any).Razorpay(options);
-    rzp.on("payment.failed", function (response: any) {
-      reject(new Error(response?.error?.description || "Payment failed"));
+    const RazorpayCheckout = window.Razorpay;
+    if (!RazorpayCheckout) {
+      reject(new Error("Razorpay Checkout SDK is unavailable."));
+      return;
+    }
+
+    const rzp = new RazorpayCheckout(options);
+    rzp.on("payment.failed", (response) => {
+      if (settled) return;
+      settled = true;
+      reject(new PaymentFailedError(response?.error?.description || "Payment failed. Please try again."));
     });
     rzp.open();
   });

@@ -3,6 +3,14 @@ import test from "node:test";
 import { generateReadableIdentifier, isCustomerIdentifier, isOrderIdentifier } from "../src/lib/identifiers.ts";
 import { getFlashSaleCountdown, parseFlashSaleEndAt } from "../src/lib/flash-sale.ts";
 import { isSameOrderAttempt, ownsOrderIdReservation } from "../src/lib/order-id-reservation.ts";
+import { createHmac } from "node:crypto";
+import {
+  checkoutDeliveryChargePaise,
+  missingRazorpayCredentials,
+  toPaise,
+  verifyRazorpayHmac,
+} from "../src/lib/razorpay-utils.ts";
+import { safePaymentErrorMessage } from "../src/lib/payment-errors.ts";
 
 test("readable identifiers use the expected short, non-personal format", () => {
   const customerIds = Array.from({ length: 100 }, () => generateReadableIdentifier("CUS"));
@@ -73,5 +81,46 @@ test("order reservations are idempotent only for the same user and checkout atte
       attemptKey
     ),
     true
+  );
+});
+
+test("Razorpay signatures reject altered payloads, malformed signatures, and wrong secrets", () => {
+  const payload = "order_test123|pay_test123";
+  const secret = "local-test-secret";
+  const signature = createHmac("sha256", secret).update(payload).digest("hex");
+
+  assert.equal(verifyRazorpayHmac(payload, signature, secret), true);
+  assert.equal(verifyRazorpayHmac(`${payload}!`, signature, secret), false);
+  assert.equal(verifyRazorpayHmac(payload, signature, "different-secret"), false);
+  assert.equal(verifyRazorpayHmac(payload, "not-a-signature", secret), false);
+});
+
+test("Razorpay amount conversion rounds to paise and uses the existing delivery threshold", () => {
+  assert.equal(toPaise(12.345), 1235);
+  assert.equal(toPaise(Number.POSITIVE_INFINITY), null);
+  assert.equal(toPaise(-1), null);
+  assert.equal(checkoutDeliveryChargePaise(99_899), 9_900);
+  assert.equal(checkoutDeliveryChargePaise(99_900), 0);
+});
+
+test("checkout reports missing server credentials without requiring or exposing webhook secrets", () => {
+  assert.deepEqual(missingRazorpayCredentials({}), [
+    "RAZORPAY_KEY_ID",
+    "RAZORPAY_KEY_SECRET",
+  ]);
+  assert.deepEqual(
+    missingRazorpayCredentials({
+      RAZORPAY_KEY_ID: "rzp_test_public",
+      RAZORPAY_KEY_SECRET: "server-secret",
+    }),
+    []
+  );
+  assert.match(
+    safePaymentErrorMessage(new Error("Missing RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET")),
+    /RAZORPAY_KEY_ID/
+  );
+  assert.doesNotMatch(
+    safePaymentErrorMessage(new Error("Checkout failed for person@example.com, phone +91 98765 43210")),
+    /person@example\.com|98765/
   );
 });

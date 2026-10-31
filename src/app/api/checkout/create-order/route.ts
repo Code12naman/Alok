@@ -1,10 +1,16 @@
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
-import crypto from "crypto";
 import { verifyFirebaseBearerToken } from "@/lib/server-auth";
 import { getAdminDb } from "@/lib/firebase-admin";
 import { isOrderIdentifier } from "@/lib/identifiers";
 import { isSameOrderAttempt, ownsOrderIdReservation } from "@/lib/order-id-reservation";
+import {
+  enforcePaymentRateLimit,
+  logPaymentRouteFailure,
+  PaymentRateLimitError,
+} from "@/lib/razorpay-server";
+
+export const runtime = "nodejs";
 
 interface CheckoutItem {
   productId?: string;
@@ -17,11 +23,7 @@ interface CheckoutItem {
 interface CreateOrderBody {
   items?: CheckoutItem[];
   addressId?: string;
-  paymentMethod?: "COD" | "Razorpay";
-  paymentStatus?: "Pending" | "Paid";
-  razorpayOrderId?: string;
-  razorpayPaymentId?: string;
-  razorpaySignature?: string;
+  paymentMethod?: "COD";
   checkoutAttemptId?: string;
   checkoutAttemptKey?: string;
 }
@@ -35,39 +37,47 @@ function cleanString(value: unknown) {
 }
 
 export async function POST(request: Request) {
+  let stage = "authentication";
   try {
     const uid = await verifyFirebaseBearerToken(request);
-    const body = (await request.json()) as CreateOrderBody;
+    stage = "rate-limit";
+    await enforcePaymentRateLimit(uid, "create");
+    let body: CreateOrderBody;
+    try {
+      body = await request.json() as CreateOrderBody;
+    } catch {
+      return NextResponse.json({ error: "Invalid checkout request." }, { status: 400 });
+    }
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Invalid checkout request." }, { status: 400 });
+    }
     const items = Array.isArray(body.items) ? body.items : [];
     const addressId = cleanString(body.addressId);
     const paymentMethod = body.paymentMethod;
-    const paymentStatus = body.paymentStatus;
 
     if (!validOrderId(body.checkoutAttemptId)) {
       return NextResponse.json({ error: "A valid checkout order ID is required." }, { status: 400 });
     }
-    if (!items.length || !addressId || !paymentMethod || !paymentStatus) {
+    if (!items.length || items.length > 50 || !/^[A-Za-z0-9_-]{1,128}$/.test(addressId) || paymentMethod !== "COD") {
       return NextResponse.json({ error: "Order details are incomplete." }, { status: 400 });
-    }
-    if (
-      (paymentMethod === "COD" && paymentStatus !== "Pending") ||
-      (paymentMethod === "Razorpay" && paymentStatus !== "Paid") ||
-      !["COD", "Razorpay"].includes(paymentMethod)
-    ) {
-      return NextResponse.json({ error: "Invalid payment state." }, { status: 400 });
-    }
-    if (paymentMethod === "Razorpay" && (!cleanString(body.razorpayOrderId) || !cleanString(body.razorpayPaymentId))) {
-      return NextResponse.json({ error: "Verified payment details are required." }, { status: 400 });
     }
 
     const aggregated = new Map<string, CheckoutItem & { quantity: number }>();
+    let totalQuantity = 0;
     for (const item of items) {
+      if (!item || typeof item !== "object") {
+        return NextResponse.json({ error: "Cart contains an invalid item." }, { status: 400 });
+      }
       const productId = cleanString(item.productId);
       const quantity = Number(item.quantity);
-      const size = cleanString(item.size);
-      const color = cleanString(item.color);
-      if (!productId || !Number.isInteger(quantity) || quantity < 1) {
+      const size = cleanString(item.size).slice(0, 80);
+      const color = cleanString(item.color).slice(0, 80);
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(productId) || !Number.isInteger(quantity) || quantity < 1 || quantity > 50) {
         return NextResponse.json({ error: "Cart contains an invalid product or quantity." }, { status: 400 });
+      }
+      totalQuantity += quantity;
+      if (totalQuantity > 100) {
+        return NextResponse.json({ error: "Cart contains too many items." }, { status: 400 });
       }
       const key = `${productId}__${size}__${color}`;
       const existing = aggregated.get(key);
@@ -79,6 +89,7 @@ export async function POST(request: Request) {
     const attemptKey = typeof body.checkoutAttemptKey === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.checkoutAttemptKey)
       ? body.checkoutAttemptKey
       : orderId;
+    stage = "load-checkout-records";
     const db = getAdminDb();
     const orderRef = db.collection("orders").doc(orderId);
     const reservationRef = db.collection("orderIdReservations").doc(orderId);
@@ -88,53 +99,8 @@ export async function POST(request: Request) {
       item,
       ref: db.collection("products").doc(item.productId!),
     }));
-    let verifiedProviderAmount: number | undefined;
 
-    if (paymentMethod === "Razorpay") {
-      const keySecret = process.env.RAZORPAY_KEY_SECRET;
-      const keyId = process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
-      const signature = cleanString(body.razorpaySignature);
-      if (!keySecret || !keyId || !signature) {
-        return NextResponse.json({ error: "Payment verification is not configured." }, { status: 503 });
-      }
-      const expectedSignature = crypto
-        .createHmac("sha256", keySecret)
-        .update(`${body.razorpayOrderId}|${body.razorpayPaymentId}`)
-        .digest("hex");
-      if (
-        signature.length !== expectedSignature.length ||
-        !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature))
-      ) {
-        return NextResponse.json({ error: "Payment signature verification failed." }, { status: 400 });
-      }
-      const authHeader = `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString("base64")}`;
-      const [orderResponse, paymentResponse] = await Promise.all([
-        fetch(`https://api.razorpay.com/v1/orders/${encodeURIComponent(cleanString(body.razorpayOrderId))}`, {
-          headers: { Authorization: authHeader },
-        }),
-        fetch(`https://api.razorpay.com/v1/payments/${encodeURIComponent(cleanString(body.razorpayPaymentId))}`, {
-          headers: { Authorization: authHeader },
-        }),
-      ]);
-      if (!orderResponse.ok || !paymentResponse.ok) {
-        return NextResponse.json({ error: "Unable to confirm payment with Razorpay." }, { status: 502 });
-      }
-      const razorpayOrder = await orderResponse.json();
-      const payment = await paymentResponse.json();
-      verifiedProviderAmount = Number(razorpayOrder.amount);
-      if (
-        razorpayOrder.notes?.userId !== uid ||
-        razorpayOrder.notes?.checkoutAttemptId !== orderId ||
-        (body.checkoutAttemptKey && razorpayOrder.notes?.checkoutAttemptKey !== body.checkoutAttemptKey) ||
-        payment.order_id !== body.razorpayOrderId ||
-        payment.status !== "captured" ||
-        payment.currency !== "INR" ||
-        Number(payment.amount) !== Number(razorpayOrder.amount)
-      ) {
-        return NextResponse.json({ error: "Payment details did not pass server verification." }, { status: 400 });
-      }
-    }
-
+    stage = "reserve-inventory-and-create-cod-order";
     await db.runTransaction(async (transaction) => {
       const orderSnapshot = await transaction.get(orderRef);
       const reservationSnapshot = await transaction.get(reservationRef);
@@ -205,12 +171,6 @@ export async function POST(request: Request) {
       const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
       const deliveryCharge = subtotal >= 999 ? 0 : 99;
       const finalAmount = subtotal + deliveryCharge;
-      if (paymentMethod === "Razorpay") {
-        const expectedAmount = Math.round(finalAmount * 100);
-        if (expectedAmount <= 0 || expectedAmount !== verifiedProviderAmount) {
-          throw new Error("Payment amount does not match the current cart.");
-        }
-      }
       const shippingAddress = {
         fullName: cleanString(address.fullName),
         phone: cleanString(address.phone),
@@ -263,14 +223,11 @@ export async function POST(request: Request) {
         customerName: shippingAddress.fullName,
         customerEmail: cleanString(profile.email),
         paymentMethod,
-        paymentStatus,
+        paymentStatus: "Pending",
         orderStatus: "Order Confirmed",
         status: "Order Confirmed",
         checkoutAttemptId: orderId,
         checkoutAttemptKey: attemptKey,
-        ...(paymentMethod === "Razorpay"
-          ? { razorpayOrderId: cleanString(body.razorpayOrderId), razorpayPaymentId: cleanString(body.razorpayPaymentId) }
-          : {}),
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
@@ -278,7 +235,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ orderId });
   } catch (error: unknown) {
-    console.error("Checkout order creation failed:", error instanceof Error ? error.message : "unknown error");
+    if (error instanceof PaymentRateLimitError) {
+      return NextResponse.json({ error: error.message }, { status: 429 });
+    }
+    logPaymentRouteFailure(stage, error);
     const message = error instanceof Error ? error.message : "Unable to create order.";
     const status = message.includes("Authentication") || message.includes("token") ? 401 : 500;
     return NextResponse.json({ error: message }, { status });
