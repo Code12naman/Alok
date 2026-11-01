@@ -27,3 +27,50 @@ export function missingRazorpayCredentials(
   return ["RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET"]
     .filter((name) => !env[name]?.trim());
 }
+
+export interface RazorpayErrorDetails {
+  statusCode?: number;
+  code?: string;
+  description?: string;
+  reason?: string;
+}
+
+export function getRazorpayErrorDetails(error: unknown): RazorpayErrorDetails {
+  if (!error || typeof error !== "object") return {};
+  const value = error as Record<string, unknown>;
+  const providerError = value.error && typeof value.error === "object"
+    ? value.error as Record<string, unknown>
+    : {};
+  const statusCode = typeof value.statusCode === "number"
+    ? value.statusCode
+    : typeof value.status === "number"
+      ? value.status
+      : undefined;
+  const code = typeof providerError.code === "string"
+    ? providerError.code
+    : typeof value.code === "string"
+      ? value.code
+      : undefined;
+  const description = typeof providerError.description === "string"
+    ? providerError.description
+    : typeof value.message === "string"
+      ? value.message
+      : undefined;
+  const reason = typeof providerError.reason === "string"
+    ? providerError.reason
+    : undefined;
+
+  return {
+    ...(statusCode ? { statusCode } : {}),
+    ...(code ? { code } : {}),
+    ...(description ? { description } : {}),
+    ...(reason ? { reason } : {}),
+  };
+}
+
+export function getPaymentInitializationStatus(error: unknown): number {
+  const { statusCode } = getRazorpayErrorDetails(error);
+  if (statusCode === 401 || statusCode === 403 || statusCode === 429) return 503;
+  if (statusCode && statusCode >= 400 && statusCode < 600) return 502;
+  return 500;
+}

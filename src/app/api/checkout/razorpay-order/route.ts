@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import type { Orders } from "razorpay/dist/types/orders";
@@ -16,7 +17,11 @@ import {
   recordCapturedPayment,
   releaseUnlinkedReservation,
 } from "@/lib/razorpay-order-state";
-import { checkoutDeliveryChargePaise, toPaise } from "@/lib/razorpay-utils";
+import {
+  checkoutDeliveryChargePaise,
+  getPaymentInitializationStatus,
+  toPaise,
+} from "@/lib/razorpay-utils";
 
 export const runtime = "nodejs";
 
@@ -99,6 +104,7 @@ function imageUrl(value: unknown): string {
 }
 
 export async function POST(request: Request) {
+  const correlationId = randomUUID();
   let stage = "authentication";
   try {
     const uid = await verifyFirebaseBearerToken(request);
@@ -435,9 +441,9 @@ export async function POST(request: Request) {
       try {
         existingProviderOrders = await client.orders.all({ receipt: orderId });
       } catch (error) {
-        if (prepared.state === "new") {
-          await releaseUnlinkedReservation(db, orderId, uid, attemptKey);
-        }
+        await releaseUnlinkedReservation(db, orderId, uid, attemptKey).catch((releaseError: unknown) =>
+          logPaymentRouteFailure("release-unlinked-reservation-after-lookup-failure", releaseError, correlationId)
+        );
         throw error;
       }
       providerOrder = existingProviderOrders.items.find((candidate) =>
@@ -477,7 +483,10 @@ export async function POST(request: Request) {
             }
           } catch (lookupError) {
             if (lookupError === error) throw error;
-            logPaymentRouteFailure("reconcile-razorpay-order-after-create-error", lookupError);
+            logPaymentRouteFailure("reconcile-razorpay-order-after-create-error", lookupError, correlationId);
+            await releaseUnlinkedReservation(db, orderId, uid, attemptKey).catch((releaseError: unknown) =>
+              logPaymentRouteFailure("release-unlinked-reservation-after-reconcile-failure", releaseError, correlationId)
+            );
             throw error;
           }
         }
@@ -542,10 +551,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 401 });
     }
     if (error instanceof Error && /not configured/i.test(error.message)) {
-      logPaymentRouteFailure(stage, error);
-      return NextResponse.json({ error: error.message }, { status: 503 });
+      logPaymentRouteFailure(stage, error, correlationId);
+      return NextResponse.json(
+        { error: "Online payments are not configured. Please contact support.", correlationId },
+        { status: 503, headers: { "x-correlation-id": correlationId } }
+      );
     }
-    logPaymentRouteFailure(stage, error);
-    return NextResponse.json({ error: "Unable to initialize payment. Please retry." }, { status: 502 });
+    logPaymentRouteFailure(stage, error, correlationId);
+    const status = getPaymentInitializationStatus(error);
+    const message = status === 503
+      ? "Online payments are temporarily unavailable. Please try again later."
+      : status === 502
+        ? "Razorpay could not initialize your payment. Please retry."
+        : "A server error prevented payment initialization. Please retry.";
+    return NextResponse.json(
+      { error: message, correlationId },
+      { status, headers: { "x-correlation-id": correlationId } }
+    );
   }
 }

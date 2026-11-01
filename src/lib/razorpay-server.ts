@@ -3,7 +3,10 @@ import "server-only";
 import { createHash } from "node:crypto";
 import Razorpay from "razorpay";
 import { getAdminDb } from "@/lib/firebase-admin";
-import { missingRazorpayCredentials } from "@/lib/razorpay-utils";
+import {
+  getRazorpayErrorDetails,
+  missingRazorpayCredentials,
+} from "@/lib/razorpay-utils";
 
 export class PaymentRateLimitError extends Error {
   constructor() {
@@ -29,38 +32,54 @@ export function getRazorpayClient(): Razorpay {
   return new Razorpay({ key_id: keyId, key_secret: keySecret });
 }
 
-export function logPaymentRouteFailure(stage: string, error: unknown): void {
-  const value = error && typeof error === "object" ? error as Record<string, unknown> : {};
-  const safeMessage = error instanceof Error
-    ? [process.env.RAZORPAY_KEY_SECRET, process.env.RAZORPAY_WEBHOOK_SECRET]
-        .filter((secret): secret is string => Boolean(secret))
-        .reduce((message, secret) => message.split(secret).join("[redacted-secret]"), error.message)
-        .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted-email]")
-        .replace(/\b(?:\+?\d[\d\s().-]{7,}\d)\b/g, "[redacted-phone]")
-        .replace(/\b(?:rzp_(?:test|live)_[A-Za-z0-9]+|pay_[A-Za-z0-9]+|order_[A-Za-z0-9]+)\b/g, "[redacted-payment-id]")
-        .replace(/\b(?:signature|secret|authorization|token)\s*[:=]\s*\S+/gi, "[redacted]")
-        .slice(0, 300)
-    : "Unknown error";
-  const code = typeof value.code === "string" && /^[A-Z0-9_-]{1,60}$/i.test(value.code)
-    ? value.code
+export function logPaymentRouteFailure(
+  stage: string,
+  error: unknown,
+  correlationId?: string
+): void {
+  const details = getRazorpayErrorDetails(error);
+  const safeText = (message: string) =>
+    [
+      process.env.RAZORPAY_KEY_SECRET,
+      process.env.RAZORPAY_WEBHOOK_SECRET,
+      process.env.FIREBASE_ADMIN_PRIVATE_KEY,
+      process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n"),
+    ]
+      .filter((secret): secret is string => Boolean(secret))
+      .reduce((safeMessage, secret) => safeMessage.split(secret).join("[redacted-secret]"), message)
+      .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted-email]")
+      .replace(/\b(?:\+?\d[\d\s().-]{7,}\d)\b/g, "[redacted-phone]")
+      .replace(/\b(?:rzp_(?:test|live)_[A-Za-z0-9]+|pay_[A-Za-z0-9]+|order_[A-Za-z0-9]+)\b/g, "[redacted-payment-id]")
+      .replace(/\b(?:signature|secret|authorization|token)\s*[:=]\s*\S+/gi, "[redacted]")
+      .slice(0, 300);
+  const safeErrorMessage = error instanceof Error
+    ? safeText(error.message)
+    : typeof details.description === "string"
+      ? safeText(details.description)
+      : "Unknown error";
+  const code = details.code && /^[A-Z0-9_-]{1,60}$/i.test(details.code)
+    ? details.code
     : undefined;
-  const status = typeof value.statusCode === "number"
-    ? value.statusCode
-    : typeof value.status === "number"
-      ? value.status
-      : error instanceof PaymentRateLimitError
-        ? 429
-        : error instanceof Error && /not configured/i.test(error.message)
-          ? 503
-          : error instanceof Error && /authentication|token/i.test(error.message)
-            ? 401
-            : undefined;
+  const reason = details.reason && /^[A-Z0-9_-]{1,60}$/i.test(details.reason)
+    ? details.reason
+    : undefined;
+  const status = details.statusCode
+    || (error instanceof PaymentRateLimitError
+      ? 429
+      : error instanceof Error && /not configured/i.test(error.message)
+        ? 503
+        : error instanceof Error && /authentication|token/i.test(error.message)
+          ? 401
+          : undefined);
 
   console.error("Checkout API failed", {
+    ...(correlationId ? { correlationId } : {}),
     stage,
     errorType: error instanceof Error ? error.name : typeof error,
-    errorMessage: safeMessage,
+    errorMessage: safeErrorMessage,
     ...(code ? { errorCode: code } : {}),
+    ...(details.description ? { razorpayDescription: safeText(details.description) } : {}),
+    ...(reason ? { errorReason: reason } : {}),
     ...(status ? { httpStatus: status } : {}),
   });
 }

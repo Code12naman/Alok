@@ -6,6 +6,8 @@ import { isSameOrderAttempt, ownsOrderIdReservation } from "../src/lib/order-id-
 import { createHmac } from "node:crypto";
 import {
   checkoutDeliveryChargePaise,
+  getPaymentInitializationStatus,
+  getRazorpayErrorDetails,
   missingRazorpayCredentials,
   toPaise,
   verifyRazorpayHmac,
@@ -123,4 +125,26 @@ test("checkout reports missing server credentials without requiring or exposing 
     safePaymentErrorMessage(new Error("Checkout failed for person@example.com, phone +91 98765 43210")),
     /person@example\.com|98765/
   );
+});
+
+test("Razorpay API errors retain provider diagnostics and map safely to checkout statuses", () => {
+  const error = {
+    statusCode: 401,
+    error: {
+      code: "BAD_REQUEST_ERROR",
+      description: "Authentication failed",
+      reason: "invalid_credentials",
+    },
+  };
+
+  assert.deepEqual(getRazorpayErrorDetails(error), {
+    statusCode: 401,
+    code: "BAD_REQUEST_ERROR",
+    description: "Authentication failed",
+    reason: "invalid_credentials",
+  });
+  assert.equal(getPaymentInitializationStatus(error), 503);
+  assert.equal(getPaymentInitializationStatus({ statusCode: 429 }), 503);
+  assert.equal(getPaymentInitializationStatus({ statusCode: 422 }), 502);
+  assert.equal(getPaymentInitializationStatus(new Error("Firestore unavailable")), 500);
 });
