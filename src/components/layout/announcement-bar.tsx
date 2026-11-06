@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Truck, Flame, Zap } from "lucide-react";
 
 const announcements = [
-  { icon: Truck, text: "Free Worldwide Shipping Over ₹999" },
+  { icon: Truck, text: "Delivery charges calculated at checkout" },
   { icon: Flame, text: "Summer Sale Up To 70% Off" },
   { icon: Zap, text: "Limited Time Flash Deals" },
 ];

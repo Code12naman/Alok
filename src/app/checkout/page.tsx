@@ -2,7 +2,7 @@
 
 import { SafeImage } from "@/components/ui/SafeImage";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -33,6 +33,11 @@ import {
   processRazorpayPayment,
 } from "@/services/paymentService";
 import { safePaymentErrorMessage } from "@/lib/payment-errors";
+import {
+  calculateDeliveryCharge,
+  normalizeShippingSettings,
+  type ShippingSettings,
+} from "@/lib/store-settings";
 
 const inputClass =
   "w-full bg-secondary border border-border rounded-xl px-4 py-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-[#F4512C] transition-colors font-medium";
@@ -124,6 +129,33 @@ export default function CheckoutPage() {
   const [errorMsg, setErrorMsg] = useState<string>("");
   const [checkoutAttemptId, setCheckoutAttemptId] = useState("");
   const [checkoutAttemptKey, setCheckoutAttemptKey] = useState("");
+  const [shippingSettings, setShippingSettings] = useState<ShippingSettings | null>(null);
+  const [shippingSettingsLoading, setShippingSettingsLoading] = useState(true);
+  const [shippingSettingsError, setShippingSettingsError] = useState("");
+
+  const loadShippingSettings = useCallback(async () => {
+    setShippingSettingsLoading(true);
+    setShippingSettingsError("");
+    try {
+      const response = await fetch("/api/checkout/shipping-settings", {
+        cache: "no-store",
+      });
+      const body = await readApiResponse<{ settings?: unknown }>(response);
+      const normalizedSettings = normalizeShippingSettings(body.settings);
+      if (!normalizedSettings) {
+        throw new Error("The store returned invalid shipping settings.");
+      }
+      setShippingSettings(normalizedSettings);
+    } catch (error: unknown) {
+      setShippingSettingsError(errorMessage(error, "Unable to load delivery charges."));
+    } finally {
+      setShippingSettingsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void Promise.resolve().then(loadShippingSettings);
+  }, [loadShippingSettings]);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -196,7 +228,9 @@ export default function CheckoutPage() {
     }
   }, [authLoading, user, step]);
 
-  const deliveryFee = cartTotal >= 999 || items.length === 0 ? 0 : 99;
+  const deliveryFee = items.length === 0 || !shippingSettings
+    ? 0
+    : calculateDeliveryCharge(cartTotal, shippingSettings);
   const finalTotal = cartTotal + deliveryFee;
 
   const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
@@ -278,6 +312,10 @@ export default function CheckoutPage() {
     }
     if (!checkoutAttemptId) {
       setErrorMsg("Preparing a secure order ID. Please try again in a moment.");
+      return;
+    }
+    if (!shippingSettings) {
+      setErrorMsg(shippingSettingsError || "Delivery charges are still loading. Please try again.");
       return;
     }
 
@@ -733,7 +771,12 @@ export default function CheckoutPage() {
                       <div className="flex items-center gap-3 pt-4">
                         <button
                           type="submit"
-                          disabled={isProcessing}
+                          disabled={
+                            isProcessing ||
+                            shippingSettingsLoading ||
+                            Boolean(shippingSettingsError) ||
+                            !shippingSettings
+                          }
                           className="bg-[#F4512C] hover:bg-[#DD3F1E] text-white text-xs font-bold px-6 py-3 rounded-xl transition-colors cursor-pointer"
                         >
                           {isProcessing ? "Saving..." : "Save Address"}
@@ -911,7 +954,12 @@ export default function CheckoutPage() {
                   {/* Complete Order Button */}
                   <button
                     onClick={handlePlaceOrder}
-                    disabled={isProcessing}
+                    disabled={
+                      isProcessing ||
+                      shippingSettingsLoading ||
+                      Boolean(shippingSettingsError) ||
+                      !shippingSettings
+                    }
                     className="w-full bg-[#F4512C] hover:bg-[#DD3F1E] text-white text-xs font-bold py-4 rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                   >
                     {isProcessing ? (
@@ -920,6 +968,10 @@ export default function CheckoutPage() {
                         transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
                         className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full"
                       />
+                    ) : shippingSettingsLoading ? (
+                      "Loading delivery charges..."
+                    ) : shippingSettingsError ? (
+                      "Delivery charges unavailable"
                     ) : (
                       <>
                         <Lock className="h-4 w-4" />{" "}
@@ -974,14 +1026,36 @@ export default function CheckoutPage() {
                 <div className="flex justify-between">
                   <span>Delivery Charge</span>
                   <span className="font-semibold text-[#F4512C]">
-                    {deliveryFee === 0 ? "FREE" : `₹${deliveryFee}`}
+                    {shippingSettingsLoading
+                      ? "Loading..."
+                      : shippingSettingsError
+                        ? "Unavailable"
+                        : deliveryFee === 0
+                          ? "FREE"
+                          : `₹${deliveryFee.toLocaleString("en-IN")}`}
                   </span>
                 </div>
+                {shippingSettingsError && (
+                  <div className="flex items-center justify-between gap-3 text-[11px] text-red-500">
+                    <span>{shippingSettingsError}</span>
+                    <button
+                      type="button"
+                      onClick={() => void loadShippingSettings()}
+                      className="shrink-0 font-semibold underline underline-offset-2"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-between items-center text-sm font-bold text-card-foreground">
                 <span>Total Amount</span>
-                <span className="text-base text-[#F4512C]">₹{finalTotal.toLocaleString("en-IN")}</span>
+                <span className="text-base text-[#F4512C]">
+                  {shippingSettingsLoading || shippingSettingsError
+                    ? "—"
+                    : `₹${finalTotal.toLocaleString("en-IN")}`}
+                </span>
               </div>
             </div>
           </div>

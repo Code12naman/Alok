@@ -5,6 +5,7 @@ import { Providers } from "@/components/providers";
 import { AnnouncementBar } from "@/components/layout/announcement-bar";
 import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
+import { getThemeBootstrapScript } from "@/lib/theme";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -28,7 +29,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(() => { try { const saved = localStorage.getItem('classic-threads-theme'); const dark = saved === 'dark' || (saved !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches); if (dark) { document.documentElement.classList.add('dark'); document.documentElement.dataset.theme = 'dark'; } } catch (_) {} })()`,
+            __html: getThemeBootstrapScript(),
           }}
         />
       </head>

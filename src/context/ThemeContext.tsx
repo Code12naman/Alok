@@ -1,8 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-
-export type Theme = "light" | "dark";
+import { resolveTheme, THEME_STORAGE_KEY, type Theme } from "@/lib/theme";
 
 interface ThemeContextValue {
   theme: Theme;
@@ -15,24 +14,27 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 function applyTheme(theme: Theme) {
   document.documentElement.classList.toggle("dark", theme === "dark");
   document.documentElement.dataset.theme = theme;
+  document.documentElement.style.colorScheme = theme;
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("light");
 
   useEffect(() => {
-    const stored = window.localStorage.getItem("classic-threads-theme") as Theme | null;
-    const preferred = stored === "dark" || stored === "light"
-      ? stored
-      : window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "dark"
-        : "light";
+    let storedValue: string | null = null;
+    try {
+      storedValue = window.localStorage.getItem(THEME_STORAGE_KEY);
+    } catch (error: unknown) {
+      console.error("Unable to read the saved theme preference.", error);
+    }
+    const stored = storedValue === "dark" || storedValue === "light" ? storedValue : null;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const preferred = resolveTheme(stored, media.matches);
 
     applyTheme(preferred);
     const stateUpdate = window.setTimeout(() => setThemeState(preferred), 0);
 
     if (!stored) {
-      const media = window.matchMedia("(prefers-color-scheme: dark)");
       const handleChange = (event: MediaQueryListEvent) => {
         const nextTheme = event.matches ? "dark" : "light";
         setThemeState(nextTheme);
@@ -50,15 +52,26 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<ThemeContextValue>(() => ({
     theme,
     setTheme: (nextTheme) => {
+      if (typeof window !== "undefined") {
+        try {
+          window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+        } catch (error: unknown) {
+          console.error("Unable to persist the theme preference.", error);
+        }
+        applyTheme(nextTheme);
+      }
       setThemeState(nextTheme);
-      window.localStorage.setItem("classic-threads-theme", nextTheme);
-      applyTheme(nextTheme);
     },
     toggleTheme: () => {
-      const nextTheme = theme === "dark" ? "light" : "dark";
-      setThemeState(nextTheme);
-      window.localStorage.setItem("classic-threads-theme", nextTheme);
+      const activeTheme = document.documentElement.dataset.theme === "dark" ? "dark" : theme;
+      const nextTheme = activeTheme === "dark" ? "light" : "dark";
+      try {
+        window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+      } catch (error: unknown) {
+        console.error("Unable to persist the theme preference.", error);
+      }
       applyTheme(nextTheme);
+      setThemeState(nextTheme);
     },
   }), [theme]);
 

@@ -138,18 +138,31 @@
   background-color: var(--card) !important;
 }
 
+:root.dark [class*="bg-[#FFFFFF]"] {
+  background-color: var(--card) !important;
+}
+
 :root.dark [class~="bg-[#F7F7F5]"],
 :root.dark [class~="bg-[#F5F5F3]"],
+:root.dark [class~="bg-[#F2F2F0]"],
 :root.dark [class~="bg-gray-100"],
-:root.dark [class~="bg-gray-50"] {
+:root.dark [class~="bg-gray-50"],
+:root.dark [class*="bg-[#F7F7F5]"],
+:root.dark [class*="bg-[#F5F5F3]"],
+:root.dark [class*="bg-[#F2F2F0]"] {
   background-color: var(--surface) !important;
 }
 
 :root.dark [class~="text-[#111111]"],
+:root.dark [class~="text-black"],
 :root.dark [class~="text-gray-800"],
 :root.dark [class~="text-gray-700"],
 :root.dark [class~="text-gray-600"] {
   color: var(--text) !important;
+}
+
+:root.dark [class~="text-[#555555]"] {
+  color: var(--text-muted) !important;
 }
 
 :root.dark [class~="text-gray-500"],
@@ -158,15 +171,21 @@
 }
 
 :root.dark [class~="border-[#E6E6E3]"],
+:root.dark [class*="border-[#E6E6E3]"],
 :root.dark [class~="border-gray-100"],
 :root.dark [class~="border-gray-200"],
 :root.dark [class~="border-gray-300"] {
   border-color: var(--border) !important;
 }
 
+:root.dark [class*="hover:bg-[#F7F7F5]"]:hover,
 :root.dark [class~="hover:bg-gray-100"]:hover,
 :root.dark [class~="hover:bg-[#F7F7F5]"]:hover {
   background-color: var(--surface-secondary) !important;
+}
+
+:root.dark [class*="bg-[#FFF3F0]"] {
+  background-color: var(--primary-light) !important;
 }
 
 :root.dark input:not([type="checkbox"]):not([type="radio"]),
@@ -203,19 +222,55 @@
   color: var(--text-muted);
 }
 
+.theme-icon-dark {
+  display: none;
+}
+
+:root.dark .theme-icon-light {
+  display: none;
+}
+
+:root.dark .theme-icon-dark {
+  display: block;
+}
+
 :root.dark .trust-card:hover {
   background-color: var(--surface-secondary);
 }
 
-@media (prefers-reduced-motion: no-preference) {
+:root,
+body,
+header,
+main,
+section,
+article,
+aside,
+dialog,
+input,
+textarea,
+select,
+button,
+a {
+  transition-property: background-color, border-color, color, box-shadow;
+  transition-duration: 180ms;
+  transition-timing-function: ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root,
   body,
-  button,
-  a,
+  header,
+  main,
+  section,
+  article,
+  aside,
+  dialog,
   input,
   textarea,
-  select {
-    transition-property: background-color, border-color, color, box-shadow;
-    transition-duration: 180ms;
+  select,
+  button,
+  a {
+    transition-duration: 0ms !important;
   }
 }
 

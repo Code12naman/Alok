@@ -165,7 +165,8 @@ export function Navbar() {
               title={themeLabel}
               className="p-2 text-gray-700 hover:text-foreground transition-colors rounded-full hover:bg-gray-100"
             >
-              {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              <Moon className="theme-icon-light h-5 w-5" aria-hidden="true" />
+              <Sun className="theme-icon-dark h-5 w-5" aria-hidden="true" />
             </button>
             {/* Search button */}
             <button
@@ -300,7 +301,8 @@ export function Navbar() {
                   aria-label={themeLabel}
                   className="flex items-center gap-2 py-2 text-gray-800 hover:text-foreground"
                 >
-                  {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                  <Moon className="theme-icon-light h-4 w-4" aria-hidden="true" />
+                  <Sun className="theme-icon-dark h-4 w-4" aria-hidden="true" />
                   {theme === "dark" ? "Light Mode" : "Dark Mode"}
                 </button>
 

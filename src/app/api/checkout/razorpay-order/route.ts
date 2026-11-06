@@ -7,6 +7,11 @@ import { getAdminDb } from "@/lib/firebase-admin";
 import { isOrderIdentifier } from "@/lib/identifiers";
 import { ownsOrderIdReservation } from "@/lib/order-id-reservation";
 import {
+  calculateDeliveryCharge,
+  DEFAULT_STORE_SETTINGS,
+  normalizeShippingSettings,
+} from "@/lib/store-settings";
+import {
   enforcePaymentRateLimit,
   getRazorpayClient,
   getRazorpayKeyId,
@@ -18,7 +23,6 @@ import {
   releaseUnlinkedReservation,
 } from "@/lib/razorpay-order-state";
 import {
-  checkoutDeliveryChargePaise,
   getPaymentInitializationStatus,
   toPaise,
 } from "@/lib/razorpay-utils";
@@ -140,6 +144,7 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const orderRef = db.collection("orders").doc(orderId);
     const reservationRef = db.collection("orderIdReservations").doc(orderId);
+    const settingsRef = db.collection("settings").doc("store");
     const profileRef = db.collection("users").doc(uid);
     const addressRef = profileRef.collection("addresses").doc(body.addressId);
     const productQuantities = new Map<string, number>();
@@ -152,11 +157,12 @@ export async function POST(request: Request) {
 
     stage = "reserve-inventory";
     const prepared = await db.runTransaction(async (transaction) => {
-      const [orderSnapshot, reservationSnapshot, profileSnapshot, addressSnapshot] = await Promise.all([
+      const [orderSnapshot, reservationSnapshot, profileSnapshot, addressSnapshot, settingsSnapshot] = await Promise.all([
         transaction.get(orderRef),
         transaction.get(reservationRef),
         transaction.get(profileRef),
         transaction.get(addressRef),
+        transaction.get(settingsRef),
       ]);
 
       if (
@@ -345,7 +351,17 @@ export async function POST(request: Request) {
         (sum, item) => sum + Math.round(item.subtotal * 100),
         0
       );
-      const deliveryChargePaise = checkoutDeliveryChargePaise(subtotalPaise);
+      const shippingSettings = normalizeShippingSettings(
+        settingsSnapshot.exists ? settingsSnapshot.data() : DEFAULT_STORE_SETTINGS
+      );
+      if (!Number.isSafeInteger(subtotalPaise) || !shippingSettings) {
+        throw new CheckoutError("Order totals or store shipping settings are invalid.", 400);
+      }
+      const deliveryCharge = calculateDeliveryCharge(subtotalPaise / 100, shippingSettings);
+      const deliveryChargePaise = toPaise(deliveryCharge);
+      if (deliveryChargePaise === null) {
+        throw new CheckoutError("Order totals or store shipping settings are invalid.", 400);
+      }
       const amountPaise = subtotalPaise + deliveryChargePaise;
       if (!Number.isSafeInteger(amountPaise) || amountPaise <= 0) {
         throw new CheckoutError("The order total is invalid.", 400);

@@ -15,6 +15,10 @@ import { CartItem } from "@/context/CartContext";
 import { Address } from "./addressService";
 import { getImageUrl } from "./productService";
 import { generateReadableIdentifier } from "@/lib/identifiers";
+import {
+  calculateDeliveryCharge,
+  normalizeShippingSettings,
+} from "@/lib/store-settings";
 
 export type PaymentMethod = "Razorpay" | "COD";
 export type PaymentStatus = "Pending" | "Paid" | "Failed" | "Cancelled" | "Refunded";
@@ -342,7 +346,10 @@ export function normalizeOrder(raw: any): NormalizedOrder {
 
   const sub = Number(raw.subtotal) || Number(raw.totalAmount) || Number(raw.finalAmount) || 0;
   const disc = Number(raw.discount) || 0;
-  const del = Number(raw.deliveryCharge) ?? (sub >= 999 ? 0 : 99);
+  const rawDeliveryCharge = Number(raw.deliveryCharge);
+  const del = Number.isFinite(rawDeliveryCharge) && rawDeliveryCharge >= 0
+    ? rawDeliveryCharge
+    : 0;
   const fin = Number(raw.finalAmount) || Number(raw.totalAmount) || (sub + del - disc);
 
   const statusVal = normalizeOrderStatus(raw.orderStatus || raw.status || "Order Confirmed");
@@ -473,7 +480,23 @@ export const createOrder = async (
 
   const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
   const discount = couponDetails?.discount || 0;
-  const deliveryCharge = subtotal >= 999 ? 0 : 99;
+  const shippingResponse = await fetch("/api/checkout/shipping-settings", { cache: "no-store" });
+  const shippingBody: unknown = await shippingResponse.json();
+  if (!shippingResponse.ok) {
+    const message = shippingBody && typeof shippingBody === "object" &&
+      "error" in shippingBody && typeof shippingBody.error === "string"
+      ? shippingBody.error
+      : "Unable to load store shipping settings.";
+    throw new Error(message);
+  }
+  const shippingSettings = shippingBody && typeof shippingBody === "object" &&
+    "settings" in shippingBody
+    ? normalizeShippingSettings(shippingBody.settings)
+    : null;
+  if (!shippingSettings) {
+    throw new Error("Store shipping settings are invalid.");
+  }
+  const deliveryCharge = calculateDeliveryCharge(subtotal, shippingSettings);
   const finalAmount = Math.max(0, subtotal + deliveryCharge - discount);
 
   // 2. Customer snapshot

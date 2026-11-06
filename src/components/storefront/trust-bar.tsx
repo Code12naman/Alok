@@ -3,8 +3,8 @@ import { Truck, ShieldCheck, RefreshCw, Headphones } from "lucide-react";
 const trustItems = [
   {
     icon: Truck,
-    title: "Free Shipping",
-    subtitle: "Orders over ₹999",
+    title: "Delivery Charges",
+    subtitle: "Configured at checkout",
   },
   {
     icon: ShieldCheck,

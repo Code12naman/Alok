@@ -1,17 +1,58 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { motion } from "framer-motion";
 import { ShoppingBag, ArrowRight, Minus, Plus, Trash2, ArrowLeft } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { useCart } from "@/context/CartContext";
+import {
+  calculateDeliveryCharge,
+  normalizeShippingSettings,
+  type ShippingSettings,
+} from "@/lib/store-settings";
 
 import { SafeImage } from "@/components/ui/SafeImage";
 
 export default function CartPage() {
   const { items, cartCount, cartTotal, updateQuantity, removeItem } = useCart();
+  const [shippingSettings, setShippingSettings] = useState<ShippingSettings | null>(null);
+  const [shippingSettingsLoading, setShippingSettingsLoading] = useState(true);
+  const [shippingSettingsError, setShippingSettingsError] = useState("");
 
-  const deliveryFee = cartTotal >= 999 || items.length === 0 ? 0 : 99;
+  const loadShippingSettings = useCallback(async () => {
+    setShippingSettingsLoading(true);
+    setShippingSettingsError("");
+    try {
+      const response = await fetch("/api/checkout/shipping-settings", { cache: "no-store" });
+      const body: unknown = await response.json();
+      if (!response.ok) {
+        const message = body && typeof body === "object" && "error" in body &&
+          typeof body.error === "string"
+          ? body.error
+          : "Unable to load delivery charges.";
+        throw new Error(message);
+      }
+      const settings = body && typeof body === "object" && "settings" in body
+        ? normalizeShippingSettings(body.settings)
+        : null;
+      if (!settings) throw new Error("The store returned invalid shipping settings.");
+      setShippingSettings(settings);
+    } catch (error: unknown) {
+      setShippingSettingsError(
+        error instanceof Error ? error.message : "Unable to load delivery charges."
+      );
+    } finally {
+      setShippingSettingsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void Promise.resolve().then(loadShippingSettings);
+  }, [loadShippingSettings]);
+
+  const deliveryFee = items.length === 0 || !shippingSettings
+    ? 0
+    : calculateDeliveryCharge(cartTotal, shippingSettings);
   const totalAmount = cartTotal + deliveryFee;
 
   return (
@@ -172,19 +213,41 @@ export default function CartPage() {
                   <div className="flex justify-between">
                     <span>Delivery Charge</span>
                     <span className="font-bold text-[#F4512C]">
-                      {deliveryFee === 0 ? "FREE" : `₹${deliveryFee}`}
+                      {shippingSettingsLoading
+                        ? "Loading..."
+                        : shippingSettingsError
+                          ? "Unavailable"
+                          : deliveryFee === 0
+                            ? "FREE"
+                            : `₹${deliveryFee.toLocaleString("en-IN")}`}
                     </span>
                   </div>
-                  {deliveryFee > 0 && (
+                  {shippingSettings && shippingSettings.freeShippingEnabled && deliveryFee > 0 && (
                     <p className="text-[10px] text-gray-400">
-                      Add ₹{(999 - cartTotal).toLocaleString("en-IN")} more to qualify for FREE Delivery!
+                      Add ₹{Math.max(0, shippingSettings.freeShippingThreshold - cartTotal).toLocaleString("en-IN")} more to qualify for FREE delivery.
+                    </p>
+                  )}
+                  {shippingSettingsError && (
+                    <p role="alert" className="flex items-center justify-between gap-3 text-[10px] text-red-500">
+                      <span>{shippingSettingsError}</span>
+                      <button
+                        type="button"
+                        onClick={() => void loadShippingSettings()}
+                        className="shrink-0 font-semibold underline underline-offset-2"
+                      >
+                        Retry
+                      </button>
                     </p>
                   )}
                 </div>
 
                 <div className="flex justify-between items-center text-base font-extrabold text-[#111111]">
                   <span>Total Amount</span>
-                  <span className="text-xl text-[#F4512C]">₹{totalAmount.toLocaleString("en-IN")}</span>
+                  <span className="text-xl text-[#F4512C]">
+                    {shippingSettingsLoading || shippingSettingsError
+                      ? "—"
+                      : `₹${totalAmount.toLocaleString("en-IN")}`}
+                  </span>
                 </div>
 
                 <Link

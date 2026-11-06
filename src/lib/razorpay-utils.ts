@@ -17,10 +17,6 @@ export function toPaise(amountInRupees: number): number | null {
   return Number.isSafeInteger(amountInPaise) ? amountInPaise : null;
 }
 
-export function checkoutDeliveryChargePaise(subtotalPaise: number): number {
-  return subtotalPaise >= 99_900 ? 0 : 9_900;
-}
-
 export function missingRazorpayCredentials(
   env: Record<string, string | undefined>
 ): string[] {

@@ -307,8 +307,8 @@ export default function ProductPage() {
             <div className="grid grid-cols-3 gap-3 pt-4 border-t border-[#E6E6E3]">
               <div className="flex flex-col items-center text-center p-2 rounded-xl bg-[#F7F7F5]">
                 <Truck className="h-4 w-4 text-[#F4512C] mb-1" />
-                <span className="text-[10px] font-bold text-[#111111]">Free Shipping</span>
-                <span className="text-[9px] text-gray-500">Over ₹999</span>
+                <span className="text-[10px] font-bold text-[#111111]">Delivery Charges</span>
+                <span className="text-[9px] text-gray-500">Shown at checkout</span>
               </div>
               <div className="flex flex-col items-center text-center p-2 rounded-xl bg-[#F7F7F5]">
                 <RefreshCw className="h-4 w-4 text-[#F4512C] mb-1" />

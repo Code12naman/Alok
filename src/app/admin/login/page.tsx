@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
+import { FirebaseError } from "firebase/app";
 import { adminAuth, adminDb } from "@/firebase/config";
 import { doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
@@ -15,7 +16,54 @@ export default function AdminLogin() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetMessage, setResetMessage] = useState("");
   const router = useRouter();
+
+  const handlePasswordReset = async () => {
+    if (resetLoading) return;
+
+    setError("");
+    setResetMessage("");
+
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) {
+      setError("Enter your registered email address to reset your password.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setError("Enter a valid email address.");
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      await sendPasswordResetEmail(adminAuth, normalizedEmail);
+      setResetMessage(
+        "If an account exists for this email, password reset instructions will be sent."
+      );
+    } catch (err: unknown) {
+      const errorCode = err instanceof FirebaseError ? err.code : "";
+      console.error("ADMIN PASSWORD RESET ERROR:", errorCode, err);
+      if (errorCode === "auth/user-not-found") {
+        setResetMessage(
+          "If an account exists for this email, password reset instructions will be sent."
+        );
+      } else if (errorCode === "auth/invalid-email") {
+        setError("Enter a valid email address.");
+      } else if (errorCode === "auth/network-request-failed") {
+        setError("Unable to reach the server. Check your connection and try again.");
+      } else if (errorCode === "auth/too-many-requests") {
+        setError("Too many reset attempts. Please wait a while and try again.");
+      } else if (errorCode === "auth/operation-not-allowed") {
+        setError("Password reset is unavailable. Please contact your administrator.");
+      } else {
+        setError("Unable to send password reset instructions. Please try again.");
+      }
+    } finally {
+      setResetLoading(false);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,11 +78,16 @@ export default function AdminLogin() {
       let snapshot;
       try {
         snapshot = await getDoc(userRef);
-      } catch (firestoreErr: any) {
+      } catch (firestoreErr: unknown) {
         console.error("ROLE READ ERROR:", firestoreErr);
+        const firestoreMessage = firestoreErr instanceof Error
+          ? firestoreErr.message
+          : firestoreErr instanceof FirebaseError
+            ? firestoreErr.code
+            : "Permission denied";
 
         // Do NOT show "Unauthorized admin account" for Condition B (Firestore permission/read error)
-        setError(`Unable to verify admin role due to a Firestore error: ${firestoreErr?.message || firestoreErr?.code || "Permission denied"}`);
+        setError(`Unable to verify admin role due to a Firestore error: ${firestoreMessage}`);
         return;
       }
 
@@ -56,19 +109,21 @@ export default function AdminLogin() {
         console.log("ADMIN ROLE VERIFIED SUCCESSFULLY. REDIRECTING TO DASHBOARD...");
         router.push("/admin/dashboard");
       }
-    } catch (err: any) {
-      console.error("ADMIN LOGIN ERROR:", err?.code, err?.message, err);
+    } catch (err: unknown) {
+      const errorCode = err instanceof FirebaseError ? err.code : "";
+      const errorMessage = err instanceof Error ? err.message : "";
+      console.error("ADMIN LOGIN ERROR:", errorCode, errorMessage, err);
       if (
-        err?.code === "auth/invalid-credential" ||
-        err?.code === "auth/user-not-found" ||
-        err?.code === "auth/wrong-password" ||
-        err?.code === "auth/invalid-email"
+        errorCode === "auth/invalid-credential" ||
+        errorCode === "auth/user-not-found" ||
+        errorCode === "auth/wrong-password" ||
+        errorCode === "auth/invalid-email"
       ) {
         setError("Invalid email or password. Please try again.");
-      } else if (err?.code === "auth/too-many-requests") {
+      } else if (errorCode === "auth/too-many-requests") {
         setError("Too many failed attempts. Please try again later.");
       } else {
-        setError(err?.message || "Failed to sign in. Please try again.");
+        setError(errorMessage || "Failed to sign in. Please try again.");
       }
     } finally {
       setLoading(false);
@@ -94,6 +149,11 @@ export default function AdminLogin() {
           {error && (
             <div className="mb-6 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-500 text-sm text-center">
               {error}
+            </div>
+          )}
+          {resetMessage && (
+            <div role="status" className="mb-6 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-400 text-sm text-center">
+              {resetMessage}
             </div>
           )}
 
@@ -138,8 +198,20 @@ export default function AdminLogin() {
                 <input type="checkbox" className="w-4 h-4 rounded border-white/20 bg-transparent accent-[#ff6a00]" />
                 <span className="text-white/50 group-hover:text-white transition-colors">Remember me</span>
               </label>
-              <button type="button" className="text-[#ff6a00] hover:text-[#ff6a00]/80 transition-colors">
-                Forgot password?
+              <button
+                type="button"
+                onClick={handlePasswordReset}
+                disabled={resetLoading}
+                className="text-[#ff6a00] hover:text-[#ff6a00]/80 transition-colors disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {resetLoading ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Sending...
+                  </span>
+                ) : (
+                  "Forgot password?"
+                )}
               </button>
             </div>
 

@@ -2,33 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { motion } from "framer-motion";
 import { ArrowRight, Star } from "lucide-react";
-import { SafeImage } from "@/components/ui/SafeImage";
-
-const floatingCards = [
-  {
-    name: "Air Max 270",
-    price: "₹12,999",
-    image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&q=80&w=400",
-    position: "top-12 right-6 sm:right-12 lg:right-16",
-    delay: 0,
-  },
-  {
-    name: "Wireless Headphones",
-    price: "₹8,999",
-    image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&q=80&w=400",
-    position: "top-1/2 -translate-y-1/2 right-12 sm:right-24 lg:right-32",
-    delay: 0.5,
-  },
-  {
-    name: "Smart Watch",
-    price: "₹19,999",
-    image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&q=80&w=400",
-    position: "bottom-16 right-4 sm:right-10 lg:right-14",
-    delay: 1,
-  },
-];
 
 const customerAvatars = [
   "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=120",
@@ -125,34 +99,9 @@ export function HeroSection() {
 
           </div>
 
-          {/* ── Right Column: Glassmorphism Floating Product Cards ── */}
-          <div className="lg:col-span-6 relative hidden md:block min-h-[400px]">
-            {floatingCards.map((card, idx) => (
-              <motion.div
-                key={card.name}
-                initial={{ y: 0 }}
-                animate={{ y: [0, -8, 0] }}
-                transition={{
-                  duration: 4,
-                  repeat: Infinity,
-                  ease: "easeInOut",
-                  delay: card.delay,
-                }}
-                className={`absolute ${card.position} z-20 flex items-center gap-3 bg-white/90 backdrop-blur-md p-2.5 pr-4 rounded-2xl shadow-lg border border-white/40 hover:shadow-xl transition-shadow max-w-[210px]`}
-              >
-                <div className="relative h-12 w-12 rounded-xl overflow-hidden bg-[#F7F7F5] flex-shrink-0 border border-gray-100">
-                  <SafeImage src={card.image} alt={card.name} fill sizes="48px" className="object-cover" />
-                </div>
-                <div className="min-w-0">
-                  <h4 className="text-xs font-bold text-[#111111] truncate">{card.name}</h4>
-                  <p className="text-[11px] font-extrabold text-[#F4512C]">{card.price}</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-
         </div>
       </div>
+
     </section>
   );
 }

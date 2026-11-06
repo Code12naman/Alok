@@ -3,7 +3,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Minus, Plus, ShoppingBag, ArrowRight } from "lucide-react";
 import { useCart } from "@/context/CartContext";
-import Image from "next/image";
 import Link from "next/link";
 import { SafeImage } from "@/components/ui/SafeImage";
 
@@ -170,7 +169,7 @@ export function CartDrawer({ isOpen, onClose }: CartDrawerProps) {
                   <div className="flex justify-between">
                     <span>Shipping</span>
                     <span className="font-semibold text-[#F4512C]">
-                      {cartTotal >= 999 ? "FREE" : "Calculated at checkout"}
+                      Calculated at checkout
                     </span>
                   </div>
                 </div>

@@ -5,6 +5,12 @@ import { getAdminDb } from "@/lib/firebase-admin";
 import { isOrderIdentifier } from "@/lib/identifiers";
 import { isSameOrderAttempt, ownsOrderIdReservation } from "@/lib/order-id-reservation";
 import {
+  calculateDeliveryCharge,
+  DEFAULT_STORE_SETTINGS,
+  normalizeShippingSettings,
+} from "@/lib/store-settings";
+import { toPaise } from "@/lib/razorpay-utils";
+import {
   enforcePaymentRateLimit,
   logPaymentRouteFailure,
   PaymentRateLimitError,
@@ -93,6 +99,7 @@ export async function POST(request: Request) {
     const db = getAdminDb();
     const orderRef = db.collection("orders").doc(orderId);
     const reservationRef = db.collection("orderIdReservations").doc(orderId);
+    const settingsRef = db.collection("settings").doc("store");
     const profileRef = db.collection("users").doc(uid);
     const addressRef = profileRef.collection("addresses").doc(addressId);
     const productRefs = [...aggregated.values()].map((item) => ({
@@ -116,6 +123,7 @@ export async function POST(request: Request) {
       }
       const profileSnapshot = await transaction.get(profileRef);
       const addressSnapshot = await transaction.get(addressRef);
+      const settingsSnapshot = await transaction.get(settingsRef);
       const productSnapshots = [];
       for (const { ref } of productRefs) {
         productSnapshots.push(await transaction.get(ref));
@@ -169,8 +177,20 @@ export async function POST(request: Request) {
         subtotal,
       }));
       const subtotal = orderItems.reduce((sum, item) => sum + item.subtotal, 0);
-      const deliveryCharge = subtotal >= 999 ? 0 : 99;
-      const finalAmount = subtotal + deliveryCharge;
+      const subtotalPaise = toPaise(subtotal);
+      const shippingSettings = normalizeShippingSettings(
+        settingsSnapshot.exists ? settingsSnapshot.data() : DEFAULT_STORE_SETTINGS
+      );
+      if (subtotalPaise === null || !shippingSettings) {
+        throw new Error("Order totals or store shipping settings are invalid.");
+      }
+      const deliveryCharge = calculateDeliveryCharge(subtotal, shippingSettings);
+      const deliveryChargePaise = toPaise(deliveryCharge);
+      if (deliveryChargePaise === null || !Number.isSafeInteger(subtotalPaise + deliveryChargePaise)) {
+        throw new Error("Order totals or store shipping settings are invalid.");
+      }
+      const finalAmount = (subtotalPaise + deliveryChargePaise) / 100;
+      const normalizedSubtotal = subtotalPaise / 100;
       const shippingAddress = {
         fullName: cleanString(address.fullName),
         phone: cleanString(address.phone),
@@ -214,7 +234,7 @@ export async function POST(request: Request) {
         deliveryAddress: shippingAddress,
         items: orderItems,
         products: orderItems,
-        subtotal,
+        subtotal: normalizedSubtotal,
         discount: 0,
         couponCode: "",
         deliveryCharge,

@@ -17,6 +17,15 @@ export async function POST(request: Request) {
     const folder = typeof body?.folder === "string" && body.folder.trim()
       ? body.folder.trim()
       : "street-mode/products";
+    if (
+      folder.startsWith("classic-threads/admin-profiles/") &&
+      folder !== `classic-threads/admin-profiles/${uid}`
+    ) {
+      return NextResponse.json(
+        { error: "Profile photos can only be uploaded to your own profile folder." },
+        { status: 403 }
+      );
+    }
     const timestamp = Math.round(Date.now() / 1000);
     const signature = cloudinary.utils.api_sign_request({ timestamp, folder }, apiSecret);
 

@@ -5,7 +5,6 @@ import { getFlashSaleCountdown, parseFlashSaleEndAt } from "../src/lib/flash-sal
 import { isSameOrderAttempt, ownsOrderIdReservation } from "../src/lib/order-id-reservation.ts";
 import { createHmac } from "node:crypto";
 import {
-  checkoutDeliveryChargePaise,
   getPaymentInitializationStatus,
   getRazorpayErrorDetails,
   missingRazorpayCredentials,
@@ -13,6 +12,12 @@ import {
   verifyRazorpayHmac,
 } from "../src/lib/razorpay-utils.ts";
 import { safePaymentErrorMessage } from "../src/lib/payment-errors.ts";
+import {
+  DEFAULT_STORE_SETTINGS,
+  calculateDeliveryCharge,
+  normalizeStoredStoreSettings,
+  validateStoreSettings,
+} from "../src/lib/store-settings.ts";
 
 test("readable identifiers use the expected short, non-personal format", () => {
   const customerIds = Array.from({ length: 100 }, () => generateReadableIdentifier("CUS"));
@@ -97,12 +102,20 @@ test("Razorpay signatures reject altered payloads, malformed signatures, and wro
   assert.equal(verifyRazorpayHmac(payload, "not-a-signature", secret), false);
 });
 
-test("Razorpay amount conversion rounds to paise and uses the existing delivery threshold", () => {
+test("Razorpay amount conversion rounds to paise", () => {
   assert.equal(toPaise(12.345), 1235);
   assert.equal(toPaise(Number.POSITIVE_INFINITY), null);
   assert.equal(toPaise(-1), null);
-  assert.equal(checkoutDeliveryChargePaise(99_899), 9_900);
-  assert.equal(checkoutDeliveryChargePaise(99_900), 0);
+  assert.equal(calculateDeliveryCharge(998.99, {
+    defaultShippingRate: 99,
+    freeShippingEnabled: true,
+    freeShippingThreshold: 999,
+  }), 99);
+  assert.equal(calculateDeliveryCharge(999, {
+    defaultShippingRate: 99,
+    freeShippingEnabled: true,
+    freeShippingThreshold: 999,
+  }), 0);
 });
 
 test("checkout reports missing server credentials without requiring or exposing webhook secrets", () => {
@@ -147,4 +160,32 @@ test("Razorpay API errors retain provider diagnostics and map safely to checkout
   assert.equal(getPaymentInitializationStatus({ statusCode: 429 }), 503);
   assert.equal(getPaymentInitializationStatus({ statusCode: 422 }), 502);
   assert.equal(getPaymentInitializationStatus(new Error("Firestore unavailable")), 500);
+});
+
+test("store settings support first-time loading and validate values before saving", () => {
+  assert.deepEqual(normalizeStoredStoreSettings(DEFAULT_STORE_SETTINGS), DEFAULT_STORE_SETTINGS);
+  assert.equal(normalizeStoredStoreSettings({ ...DEFAULT_STORE_SETTINGS, gstPercentage: 101 }), null);
+
+  const settings = {
+    websiteName: " Classic Threads ",
+    storeEmail: "store@example.com",
+    phoneNumber: "+91 98765 43210",
+    address: "Main Street",
+    freeShippingEnabled: false,
+    freeShippingThreshold: 1000,
+    defaultShippingRate: 50,
+    gstPercentage: 5,
+  };
+  assert.deepEqual(validateStoreSettings(settings), {
+    success: true,
+    settings: { ...settings, websiteName: "Classic Threads" },
+  });
+  assert.deepEqual(validateStoreSettings({ ...settings, storeEmail: "invalid" }), {
+    success: false,
+    error: "Enter a valid store email address.",
+  });
+  assert.deepEqual(validateStoreSettings({ ...settings, gstPercentage: 101 }), {
+    success: false,
+    error: "GST percentage must be a number between 0 and 100.",
+  });
 });

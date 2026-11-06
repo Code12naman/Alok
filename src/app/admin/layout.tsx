@@ -1,15 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { AdminProtectedRoute } from "@/components/admin/AdminProtectedRoute";
 import { logoutUser } from "@/services/authService";
 import { adminAuth } from "@/firebase/config";
+import { useAdminAuth } from "@/context/AdminAuthContext";
+import { SafeImage } from "@/components/ui/SafeImage";
 import {
   FiHome, FiBox, FiPlusSquare, FiList, FiShoppingCart,
   FiUsers, FiTag, FiStar, FiSettings, FiLogOut, FiSearch,
-  FiBell, FiMenu, FiX, FiChevronRight,
+  FiBell, FiMenu, FiX, FiChevronRight, FiUser, FiEdit2,
+  FiKey, FiChevronDown,
 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -28,6 +31,7 @@ const sidebarLinks = [
   { name: "Customers", href: "/admin/customers", icon: FiUsers },
   { name: "Coupons", href: "/admin/coupons", icon: FiTag },
   { name: "Reviews", href: "/admin/reviews", icon: FiStar },
+  { name: "Profile", href: "/admin/profile", icon: FiUser },
   { name: "Settings", href: "/admin/settings", icon: FiSettings },
 ];
 
@@ -129,6 +133,28 @@ function SidebarContent({ pathname, onClose }: { pathname: string; onClose?: () 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const { user, profile } = useAdminAuth();
+
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (event.target instanceof Node && !profileMenuRef.current?.contains(event.target)) {
+        setProfileMenuOpen(false);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setProfileMenuOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [profileMenuOpen]);
 
   useEffect(() => {
     if (mobileOpen) {
@@ -214,7 +240,96 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <FiBell className="w-4.5 h-4.5" />
                 <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-[#ff6500] rounded-full" />
               </button>
-              <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-[#ff6500] to-orange-400 flex-shrink-0" />
+              <div ref={profileMenuRef} className="relative">
+                <button
+                  type="button"
+                  aria-label="Open admin profile menu"
+                  aria-haspopup="menu"
+                  aria-expanded={profileMenuOpen}
+                  onClick={() => {
+                    setLogoutError("");
+                    setProfileMenuOpen((open) => !open);
+                  }}
+                  className="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] p-1 pr-2 transition-colors hover:border-[#ff6500]/40 hover:bg-white/[0.08] focus:outline-none focus:ring-2 focus:ring-[#ff6500]/50"
+                >
+                  <span className="relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-gradient-to-tr from-[#ff6500] to-orange-400 text-xs font-bold text-white">
+                    {profile?.photoURL ? (
+                      <SafeImage src={profile.photoURL} alt="" fill sizes="32px" className="object-cover" />
+                    ) : (
+                      (profile?.name || user?.displayName || user?.email || "A").charAt(0).toUpperCase()
+                    )}
+                  </span>
+                  <span className="hidden max-w-32 truncate text-left text-xs font-medium text-white/80 sm:block">
+                    {profile?.name || user?.displayName || "Admin"}
+                  </span>
+                  <FiChevronDown className={`hidden h-3.5 w-3.5 text-white/50 transition-transform sm:block ${profileMenuOpen ? "rotate-180" : ""}`} />
+                </button>
+
+                {profileMenuOpen && (
+                  <div
+                    role="menu"
+                    aria-label="Admin account"
+                    className="absolute right-0 top-full z-50 mt-2 w-[min(19rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-white/10 bg-[#141414] shadow-2xl"
+                  >
+                    <div className="flex items-center gap-3 border-b border-white/[0.08] p-4">
+                      <span className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gradient-to-tr from-[#ff6500] to-orange-400 text-sm font-bold text-white">
+                        {profile?.photoURL ? (
+                          <SafeImage src={profile.photoURL} alt="" fill sizes="44px" className="object-cover" />
+                        ) : (
+                          (profile?.name || user?.displayName || user?.email || "A").charAt(0).toUpperCase()
+                        )}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-white">
+                          {profile?.name || user?.displayName || "Administrator"}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-white/45">
+                          {user?.email || profile?.email || ""}
+                        </span>
+                      </span>
+                    </div>
+                    <div className="p-1.5">
+                      {[
+                        { label: "Account / Profile", href: "/admin/profile", icon: FiUser },
+                        { label: "Edit Profile", href: "/admin/profile#profile-information", icon: FiEdit2 },
+                        { label: "Change Password", href: "/admin/profile#password", icon: FiKey },
+                        { label: "Account Settings", href: "/admin/settings", icon: FiSettings },
+                      ].map((item) => (
+                        <Link
+                          key={item.label}
+                          href={item.href}
+                          role="menuitem"
+                          onClick={() => setProfileMenuOpen(false)}
+                          className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-white/70 transition-colors hover:bg-white/[0.06] hover:text-white"
+                        >
+                          <item.icon className="h-4 w-4 text-white/45" />
+                          {item.label}
+                        </Link>
+                      ))}
+                    </div>
+                    <div className="border-t border-white/[0.08] p-1.5">
+                      {logoutError && <p role="alert" className="px-3 py-2 text-xs text-red-300">{logoutError}</p>}
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={async () => {
+                          setLogoutError("");
+                          try {
+                            await logoutUser(adminAuth);
+                            setProfileMenuOpen(false);
+                          } catch (error: unknown) {
+                            setLogoutError(error instanceof Error ? error.message : "Unable to log out.");
+                          }
+                        }}
+                        className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-red-300 transition-colors hover:bg-red-500/10"
+                      >
+                        <FiLogOut className="h-4 w-4" />
+                        Logout
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </header>
 

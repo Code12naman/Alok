@@ -26,7 +26,7 @@ export function Footer() {
               />
               <div className="flex flex-col text-left">
                 <span className="font-extrabold text-base md:text-lg tracking-tight text-white leading-none">
-                  CLASSIC <span className="text-[#F4512C]">THREADS</span>
+                  CLASSIC THREADS
                 </span>
                 <span className="text-[9px] font-bold tracking-widest text-gray-400 uppercase mt-0.5 leading-none">
                   MJ FASHION HUB
